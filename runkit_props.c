@@ -24,13 +24,15 @@
 
 /* {{{ php_runkit_update_children_def_props
 	Scan the class_table for children of the class just updated */
-int php_runkit_update_children_def_props(zend_class_entry *ce, int num_args, va_list args, zend_hash_key *hash_key)
+int php_runkit_update_children_def_props(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key)
 {
 	zend_class_entry *parent_class =  va_arg(args, zend_class_entry*);
 	zval *p = va_arg(args, zval*);
 	char *pname = va_arg(args, char*);
 	int pname_len = va_arg(args, int);
+#ifndef ZEND_ENGINE_2_3
 	TSRMLS_FETCH();
+#endif
 
 #ifdef ZEND_ENGINE_2
 	ce = *((zend_class_entry**)ce);
@@ -42,7 +44,7 @@ int php_runkit_update_children_def_props(zend_class_entry *ce, int num_args, va_
 	}
 
 	/* Process children of this child */
-	zend_hash_apply_with_arguments(EG(class_table), (apply_func_args_t)php_runkit_update_children_def_props, 4, ce, p, pname, pname_len);
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_def_props, 4, ce, p, pname, pname_len);
 
 	zend_hash_del(&ce->default_properties, pname, pname_len + 1);
 	ZVAL_ADDREF(p);
@@ -143,7 +145,7 @@ static int php_runkit_def_prop_add(char *classname, int classname_len, char *pro
 
 #ifdef ZEND_ENGINE_2
 	if (visibility != ZEND_ACC_PRIVATE) {
-		zend_hash_apply_with_arguments(EG(class_table), (apply_func_args_t)php_runkit_update_children_def_props, 4, ce, copyval, key, key_len);
+		zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_def_props, 4, ce, copyval, key, key_len);
 	}
 #endif
 

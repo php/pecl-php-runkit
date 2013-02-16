@@ -41,11 +41,26 @@
 #define PHP_RUNKIT_IMPORT_CLASSES			(PHP_RUNKIT_IMPORT_CLASS_METHODS|PHP_RUNKIT_IMPORT_CLASS_CONSTS|PHP_RUNKIT_IMPORT_CLASS_PROPS)
 #define PHP_RUNKIT_IMPORT_OVERRIDE			0x0010
 
+#if ZEND_MODULE_API_NO > 20090625
+#define ZEND_ENGINE_2_3
+#endif
 #if ZEND_MODULE_API_NO > 20050922
 #define ZEND_ENGINE_2_2
 #endif
 #if ZEND_MODULE_API_NO > 20050921
 #define ZEND_ENGINE_2_1
+#endif
+
+#ifdef ZEND_ENGINE_2_3
+# define ISCALLABLE_TSRMLS_CC TSRMLS_CC
+# define ZEND_FH_DTOR_TSRMLS_CC TSRMLS_CC
+# define ZEND_HASH_APPLY_ARGS_TSRMLS_CC TSRMLS_CC
+# define ZEND_HASH_APPLY_ARGS_TSRMLS_DC TSRMLS_DC
+#else /* <= 5.2 */
+# define ISCALLABLE_TSRMLS_CC
+# define ZEND_FH_DTOR_TSRMLS_CC
+# define ZEND_HASH_APPLY_ARGS_TSRMLS_CC
+# define ZEND_HASH_APPLY_ARGS_TSRMLS_DC
 #endif
 
 /* The TSRM interpreter patch required by runkit_sandbox was added in 5.1, but this package includes diffs for older versions
@@ -143,67 +158,56 @@ int php_runkit_check_call_stack(zend_op_array *op_array TSRMLS_DC);
 void php_runkit_function_copy_ctor(zend_function *fe, char *newname);
 int php_runkit_generate_lambda_method(char *arguments, int arguments_len, char *phpcode, int phpcode_len, zend_function **pfe TSRMLS_DC);
 int php_runkit_destroy_misplaced_functions(zend_hash_key *hash_key TSRMLS_DC);
-int php_runkit_restore_internal_functions(zend_internal_function *fe, int num_args, va_list args, zend_hash_key *hash_key);
+int php_runkit_restore_internal_functions(zend_internal_function *fe ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
 
 /* runkit_methods.c */
 int php_runkit_fetch_class(char *classname, int classname_len, zend_class_entry **pce TSRMLS_DC);
-int php_runkit_clean_children_methods(zend_class_entry *ce, int num_args, va_list args, zend_hash_key *hash_key);
-int php_runkit_update_children_methods(zend_class_entry *ce, int num_args, va_list args, zend_hash_key *hash_key);
+int php_runkit_clean_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
+int php_runkit_update_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
 #ifdef ZEND_ENGINE_2
 int php_runkit_fetch_interface(char *classname, int classname_len, zend_class_entry **pce TSRMLS_DC);
 #endif
 
-#if PHP_MAJOR_VERSION >= 6
-#define PHP_RUNKIT_FUNCTION_ADD_REF(f)	function_add_ref(f TSRMLS_CC)
+#ifdef ZEND_ENGINE_2
 #define php_runkit_locate_scope(ce, fe, methodname, methodname_len)   fe->common.scope
-#define PHP_RUNKIT_DECL_STRING_PARAM(param)		void *param; int32_t param##_len; zend_uchar param##_type;
-#define PHP_RUNKIT_STRING_SPEC					"t"
-#define PHP_RUNKIT_STRING_PARAM(param)			&param, &param##_len, &param##_type
-#define PHP_RUNKIT_STRTOLOWER(param)			php_u_strtolower((UChar*)&param, &param##_len, UG(default_locale))
-#define PHP_RUNKIT_STRING_LEN(param,addtl)		(param##_type == IS_UNICODE ? UBYTES(param##_len + (addtl)) : (param##_len + (addtl)))
-#define PHP_RUNKIT_STRING_TYPE(param)			(param##_type)
-#define PHP_RUNKIT_HASH_FIND(hash,param,ppvar)	zend_u_hash_find(hash, param##_type, (UChar *)param, param##_len + 1, (void**)ppvar)
-#define PHP_RUNKIT_HASH_EXISTS(hash,param)		zend_u_hash_exists(hash, param##_type, (UChar *)param, param##_len + 1)
-#define PHP_RUNKIT_HASH_KEY(hash_key)			((hash_key)->type == HASH_KEY_IS_UNICODE ? (hash_key)->u.unicode : (hash_key)->u.string)
-#define PHP_RUNKIT_HASH_KEYLEN(hash_key)		((hash_key)->type == HASH_KEY_IS_UNICODE ? UBYTES((hash_key)->nKeyLength) : (hash_key)->nKeyLength)
- 
-#elif PHP_MAJOR_VERSION >= 5
-#define PHP_RUNKIT_FUNCTION_ADD_REF(f)	function_add_ref(f)
-#define php_runkit_locate_scope(ce, fe, methodname, methodname_len)   fe->common.scope
-#define PHP_RUNKIT_DECL_STRING_PARAM(p)			char *p; int p##_len;
-#define PHP_RUNKIT_STRING_SPEC					"s"
-#define PHP_RUNKIT_STRING_PARAM(p)				&p, &p##_len
-#define PHP_RUNKIT_STRTOLOWER(p)				php_strtolower(&p, &p##_len)
-#define PHP_RUNKIT_STRING_LEN(param,addtl)		(param##_len + (addtl))
-#define PHP_RUNKIT_STRING_TYPE(param)			IS_STRING
-#define PHP_RUNKIT_HASH_FIND(hash,param,ppvar)	zend_hash_find(hash, param, param##_len + 1, (void**)ppvar)
-#define PHP_RUNKIT_HASH_EXISTS(hash,param)		zend_hash_exists(hash, param##_type, param, param##_len + 1)
-#define PHP_RUNKIT_HASH_KEY(hash_key)			((hash_key)->arKey)
-#define PHP_RUNKIT_HASH_KEYLEN(hash_key)		((hash_key)->nKeyLength)
 
-#else /* PHP4 */
-#define PHP_RUNKIT_FUNCTION_ADD_REF(f)			function_add_ref(f)
+#else /* ZEND_ENGINE_1 */
 zend_class_entry *_php_runkit_locate_scope(zend_class_entry *ce, zend_function *fe, char *methodname, int methodname_len);
 #define php_runkit_locate_scope(ce, fe, 		methodname, methodname_len)   _php_runkit_locate_scope((ce), (fe), (methodname), (methodname_len))
-#define PHP_RUNKIT_DECL_STRING_PARAM(p)			char *p; int p##_len;
-#define PHP_RUNKIT_STRING_SPEC					"s"
-#define PHP_RUNKIT_STRING_PARAM(p)				&p, &p##_len
-#define PHP_RUNKIT_STRTOLOWER(p)				php_strtolower(&p, &p##_len)
-#define PHP_RUNKIT_STRING_LEN(param,addtl)		(param##_len + (addtl))
-#define PHP_RUNKIT_STRING_TYPE(param)			IS_STRING
-#define PHP_RUNKIT_HASH_FIND(hash,param,ppvar)	zend_hash_find(hash, param, param##_len + 1, (void**)ppvar)
-#define PHP_RUNKIT_HASH_EXISTS(hash,param)		zend_hash_exists(hash, param##_type, param, param##_len + 1)
-#define PHP_RUNKIT_HASH_KEY(hash_key)			((hash_key)->arKey)
-#define PHP_RUNKIT_HASH_KEYLEN(hash_key)		((hash_key)->nKeyLength)
 #define zend_function_dtor						destroy_zend_function
 
 #endif /* Version Agnosticism */
 
+#ifndef Z_ADDREF_P
+# define Z_ADDREF_P(pzv) (++((pzv)->refcount))
+#endif
+#ifndef Z_ADDREF_PP
+# define Z_ADDREF_PP(ppzv) Z_ADDREF_P(*ppzv)
+#endif
+#ifndef Z_DELREF_P
+# define Z_DELREF_P(pzv) (--((pzv)->refcount))
+#endif
+#ifndef Z_ISREF_P
+# define Z_ISREF_P(pzv) ((pzv)->is_ref)
+#endif
+#ifndef Z_SET_REFCOUNT_P
+# define Z_SET_REFCOUNT_P(pzv, rc) ((pzv)->refcount = (rc))
+#endif
+#ifndef Z_UNSET_ISREF_P
+# define Z_UNSET_ISREF_P(pzv) ((pzv)->is_ref = 0)
+#endif
+#ifndef Z_SET_ISREF_P
+# define Z_SET_ISREF_P(pzv) ((pzv)->is_ref = 1)
+#endif
+#ifndef Z_SET_ISREF_PP
+# define Z_SET_ISREF_PP(ppzv) Z_SET_ISREF_P(*ppzv)
+#endif
+
 /* runkit_constants.c */
-int php_runkit_update_children_consts(zend_class_entry *ce, int num_args, va_list args, zend_hash_key *hash_key);
+int php_runkit_update_children_consts(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
 
 /* runkit_props.c */
-int php_runkit_update_children_def_props(zend_class_entry *ce, int num_args, va_list args, zend_hash_key *hash_key);
+int php_runkit_update_children_def_props(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
 #endif /* PHP_RUNKIT_MANIPULATION */
 
 #ifdef PHP_RUNKIT_SANDBOX
@@ -214,7 +218,7 @@ int php_runkit_shutdown_sandbox(SHUTDOWN_FUNC_ARGS);
 /* runkit_sandbox_parent.c */
 int php_runkit_init_sandbox_parent(INIT_FUNC_ARGS);
 int php_runkit_shutdown_sandbox_parent(SHUTDOWN_FUNC_ARGS);
-int php_runkit_sandbox_array_deep_copy(zval **value, int num_args, va_list args, zend_hash_key *hash_key);
+int php_runkit_sandbox_array_deep_copy(zval **value ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
 
 struct _php_runkit_sandbox_object {
 	zend_object obj;
@@ -242,9 +246,16 @@ struct _php_runkit_sandbox_object {
 	int parent_scope_namelen;
 };
 
+#ifdef ZEND_ENGINE_2_3
+# define RUNKIT_DEEP_COPY_ARGS(pzv) 1, Z_ARRVAL_P(pzv)
+#else /* Cheat, we know this is ZTS because sandbox is enabled */
+# define RUNKIT_DEEP_COPY_ARGS(pzv) 2, Z_ARRVAL_P(pzv) TSRMLS_CC
+#endif
+
 /* TODO: It'd be nice if objects and resources could make it across... */
 #define PHP_SANDBOX_CROSS_SCOPE_ZVAL_COPY_CTOR(pzv) \
 { \
+	INIT_PZVAL(pzv); \
 	switch (Z_TYPE_P(pzv)) { \
 		case IS_RESOURCE: \
 		case IS_OBJECT: \
@@ -255,14 +266,12 @@ struct _php_runkit_sandbox_object {
 		{ \
 			HashTable *original_hashtable = Z_ARRVAL_P(pzv); \
 			array_init(pzv); \
-			zend_hash_apply_with_arguments(original_hashtable, (apply_func_args_t)php_runkit_sandbox_array_deep_copy, 1, Z_ARRVAL_P(pzv) TSRMLS_CC); \
+			zend_hash_apply_with_arguments(original_hashtable ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_sandbox_array_deep_copy, RUNKIT_DEEP_COPY_ARGS(pzv)); \
 			break; \
 		} \
 		default: \
 			zval_copy_ctor(pzv); \
 	} \
-	(pzv)->refcount = 1; \
-	(pzv)->is_ref = 0; \
 }
 #endif /* PHP_RUNKIT_SANDBOX */
 

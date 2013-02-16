@@ -72,6 +72,43 @@ typedef struct _php_runkit_sandbox_parent_object {
 	} \
 }
 
+#ifdef ZEND_ENGINE_2_3
+/**
+ * Variant of zend_rebuild_symbol_table() which can operate on
+ * predecessing scopes
+ */
+static void php_runkit_rebuild_symbol_table(zend_execute_data *ex TSRMLS_DC) {
+	int i;
+
+	if (ex->symbol_table) return;
+
+	ALLOC_HASHTABLE(ex->symbol_table);
+	zend_hash_init(ex->symbol_table, 0, NULL, ZVAL_PTR_DTOR, 0);
+
+	if (!ex->op_array) return;
+
+	if (ex->op_array->this_var != -1 &&
+		!ex->CVs[ex->op_array->this_var] &&
+		ex->current_this) {
+		ex->CVs[ex->op_array->this_var] = (zval**)ex->CVs + ex->op_array->last_var + ex->op_array->this_var;
+		*ex->CVs[ex->op_array->this_var] = ex->current_this;
+	}
+
+	/* Populate CVs into symbol table */
+	for (i = 0; i < ex->op_array->last_var; i++) {
+		if (ex->CVs[i]) {
+			zend_hash_quick_update(ex->symbol_table,
+			                       ex->op_array->vars[i].name,
+			                       ex->op_array->vars[i].name_len + 1,
+			                       ex->op_array->vars[i].hash_value,
+			                       (void**)ex->CVs[i],
+			                       sizeof(zval*),
+			                       (void**)&ex->CVs[i]);
+		}
+	}
+}
+#endif
+
 static HashTable *php_runkit_sandbox_parent_resolve_symbol_table(php_runkit_sandbox_parent_object *objval TSRMLS_DC)
 {
 	int i;
@@ -94,19 +131,9 @@ static HashTable *php_runkit_sandbox_parent_resolve_symbol_table(php_runkit_sand
 					ALLOC_INIT_ZVAL(hidden);
 					array_init(hidden);
 					ht = Z_ARRVAL_P(hidden);
-					if ((*symtable)->refcount > 1 &&
-						!(*symtable)->is_ref) {
-						zval *cv;
-
-						MAKE_STD_ZVAL(cv);
-						*cv = **symtable;
-						zval_copy_ctor(cv);
-						zval_ptr_dtor(symtable);
-						INIT_PZVAL(cv);
-						*symtable = cv;
-					}
-					(*symtable)->is_ref = 1;
-					(*symtable)->refcount++;
+					SEPARATE_ZVAL(symtable);
+					Z_ADDREF_PP(symtable);
+					Z_SET_ISREF_PP(symtable);
 					zend_hash_update(ht, objval->self->parent_scope_name, objval->self->parent_scope_namelen + 1, (void*)symtable, sizeof(zval*), NULL);
 
 					/* Store that dummy array in the sandbox's hidden properties table so that it gets cleaned up on dtor */
@@ -126,6 +153,9 @@ static HashTable *php_runkit_sandbox_parent_resolve_symbol_table(php_runkit_sand
 		return ht;
 	}
 	if (objval->self->parent_scope == 1) {
+#ifdef ZEND_ENGINE_2_3
+		zend_rebuild_symbol_table(TSRMLS_C);
+#endif
 		return EG(active_symbol_table);
 	}
 
@@ -136,7 +166,9 @@ static HashTable *php_runkit_sandbox_parent_resolve_symbol_table(php_runkit_sand
 		}
 		ex = ex->prev_execute_data;
 	}
-
+#ifdef ZEND_ENGINE_2_3
+	php_runkit_rebuild_symbol_table(ex TSRMLS_CC);
+#endif
 	return ex->symbol_table ? ex->symbol_table : &EG(symbol_table);
 }
 
@@ -168,7 +200,7 @@ PHP_METHOD(Runkit_Sandbox_Parent,__call)
 		int i;
 
 
-		if (!zend_is_callable(func_name, IS_CALLABLE_CHECK_NO_ACCESS, &name)) {
+		if (!zend_is_callable(func_name, IS_CALLABLE_CHECK_NO_ACCESS, &name ISCALLABLE_TSRMLS_CC)) {
 			php_error_docref1(NULL TSRMLS_CC, name, E_WARNING, "Function not defined");
 			if (name) {
 				efree(name);
@@ -278,7 +310,7 @@ static void php_runkit_sandbox_parent_include_or_eval(INTERNAL_FUNCTION_PARAMETE
 					op_array = zend_compile_file(&file_handle, type TSRMLS_CC);
 					zend_destroy_file_handle(&file_handle TSRMLS_CC);
 				} else {
-					zend_file_handle_dtor(&file_handle);
+					zend_file_handle_dtor(&file_handle ZEND_FH_DTOR_TSRMLS_CC);
 					RETVAL_TRUE;
 					already_included = 1;
 				}
@@ -534,7 +566,7 @@ static zval *php_runkit_sandbox_parent_read_property(zval *object, zval *member,
 		/* ZE expects refcount == 0 for unowned values */
 		INIT_PZVAL(return_value);
 		PHP_SANDBOX_CROSS_SCOPE_ZVAL_COPY_CTOR(return_value);
-		return_value->refcount--;
+		Z_DELREF_P(return_value);
 
 		return return_value;
 	} else {
@@ -604,10 +636,9 @@ static int php_runkit_sandbox_parent_has_property(zval *object, zval *member, in
 	}
 
 	if (Z_TYPE_P(member) != IS_STRING) {
-		member_copy = *member;
+		INIT_PZVAL(&member_copy);
+		ZVAL_ZVAL(&member_copy, member, 1, 0);
 		member = &member_copy;
-		zval_copy_ctor(member);
-		member->refcount = 1;
 		convert_to_string(member);
 	}
 
@@ -677,10 +708,9 @@ static void php_runkit_sandbox_parent_unset_property(zval *object, zval *member 
 	}
 
 	if (Z_TYPE_P(member) != IS_STRING) {
-		member_copy = *member;
+		INIT_PZVAL(&member_copy);
+		ZVAL_ZVAL(&member_copy, member, 1, 0);
 		member = &member_copy;
-		zval_copy_ctor(member);
-		member->refcount = 1;
 		convert_to_string(member);
 	}
 

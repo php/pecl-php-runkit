@@ -181,7 +181,7 @@ TSRMLS_DC)
 
 /* {{{ php_runkit_update_children_methods
 	Scan the class_table for children of the class just updated */
-int php_runkit_update_children_methods(zend_class_entry *ce, int num_args, va_list args, zend_hash_key *hash_key)
+int php_runkit_update_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key)
 {
 	zend_class_entry *ancestor_class =  va_arg(args, zend_class_entry*);
 	zend_class_entry *parent_class =  va_arg(args, zend_class_entry*);
@@ -190,7 +190,9 @@ int php_runkit_update_children_methods(zend_class_entry *ce, int num_args, va_li
 	char *fname = va_arg(args, char*);
 	int fname_len = va_arg(args, int);
 	zend_function *cfe = NULL;
+#ifndef ZEND_ENGINE_2_3
 	TSRMLS_FETCH();
+#endif
 
 #ifdef ZEND_ENGINE_2
 	ce = *((zend_class_entry**)ce);
@@ -210,9 +212,9 @@ int php_runkit_update_children_methods(zend_class_entry *ce, int num_args, va_li
 	}
 
 	/* Process children of this child */
-	zend_hash_apply_with_arguments(EG(class_table), (apply_func_args_t)php_runkit_update_children_methods, 5, ancestor_class, ce, fe, fname, fname_len);
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, ancestor_class, ce, fe, fname, fname_len);
 
-	PHP_RUNKIT_FUNCTION_ADD_REF(fe);
+	function_add_ref(fe);
 	if (zend_hash_add_or_update(&ce->function_table, fname, fname_len + 1, fe, sizeof(zend_function), NULL, cfe ? HASH_UPDATE : HASH_ADD) ==  FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Error updating child class");
 		return ZEND_HASH_APPLY_KEEP;
@@ -226,7 +228,7 @@ int php_runkit_update_children_methods(zend_class_entry *ce, int num_args, va_li
 
 /* {{{ php_runkit_clean_children
 	Scan the class_table for children of the class just updated */
-int php_runkit_clean_children_methods(zend_class_entry *ce, int num_args, va_list args, zend_hash_key *hash_key)
+int php_runkit_clean_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key)
 {
 	zend_class_entry *ancestor_class =  va_arg(args, zend_class_entry*);
 	zend_class_entry *parent_class =  va_arg(args, zend_class_entry*);
@@ -234,7 +236,9 @@ int php_runkit_clean_children_methods(zend_class_entry *ce, int num_args, va_lis
 	char *fname = va_arg(args, char*);
 	int fname_len = va_arg(args, int);
 	zend_function *cfe = NULL;
+#ifndef ZEND_ENGINE_2_3
 	TSRMLS_FETCH();
+#endif
 
 #ifdef ZEND_ENGINE_2
 	ce = *((zend_class_entry**)ce);
@@ -259,7 +263,7 @@ int php_runkit_clean_children_methods(zend_class_entry *ce, int num_args, va_lis
 	}
 
 	/* Process children of this child */
-	zend_hash_apply_with_arguments(EG(class_table), (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, fname, fname_len);
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, fname, fname_len);
 
 	zend_hash_del(&ce->function_table, fname, fname_len + 1);
 
@@ -325,7 +329,7 @@ static void php_runkit_method_add_or_update(INTERNAL_FUNCTION_PARAMETERS, int ad
 	}
 
 	func = *fe;
-	PHP_RUNKIT_FUNCTION_ADD_REF(&func);
+	function_add_ref(&func);
 	efree(func.common.function_name);
 	func.common.function_name = estrndup(methodname, methodname_len);
 #ifdef ZEND_ENGINE_2
@@ -345,7 +349,7 @@ static void php_runkit_method_add_or_update(INTERNAL_FUNCTION_PARAMETERS, int ad
 	func.common.fn_flags |= ZEND_ACC_ALLOW_STATIC;
 #endif
 
-	zend_hash_apply_with_arguments(EG(class_table), (apply_func_args_t)php_runkit_update_children_methods, 5, ancestor_class, ce, &func, methodname, 
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, ancestor_class, ce, &func, methodname, 
 methodname_len);
 
 	if (zend_hash_add_or_update(&ce->function_table, methodname, methodname_len + 1, &func, sizeof(zend_function), NULL, add_or_update) == FAILURE) {
@@ -397,14 +401,14 @@ static int php_runkit_method_copy(char *dclass, int dclass_len, char *dfunc, int
 	dfe.common.scope = dce;
 #endif
 
-	if (zend_hash_add(&dce->function_table, dfunc, dfunc_len + 1, &dfe, sizeof(zend_function), &dfeInHashTable) == FAILURE) {
+	if (zend_hash_add(&dce->function_table, dfunc, dfunc_len + 1, &dfe, sizeof(zend_function), (void**)&dfeInHashTable) == FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Error adding method to class %s::%s()", dclass, dfunc);
 		return FAILURE;
 	}
 
 	PHP_RUNKIT_ADD_MAGIC_METHOD(dce, dfunc, dfeInHashTable);
 
-	zend_hash_apply_with_arguments(EG(class_table), (apply_func_args_t)php_runkit_update_children_methods, 5, dce, dce, &dfe, dfunc, dfunc_len);
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, dce, dce, &dfe, dfunc, dfunc_len);
 
 	return SUCCESS;
 }
@@ -456,7 +460,7 @@ PHP_FUNCTION(runkit_method_remove)
 
 	ancestor_class = php_runkit_locate_scope(ce, fe, methodname, methodname_len);
 
-	zend_hash_apply_with_arguments(EG(class_table), (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, methodname, methodname_len);
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, methodname, methodname_len);
 
 	if (zend_hash_del(&ce->function_table, methodname, methodname_len + 1) == FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to remove method from class");
@@ -501,11 +505,11 @@ PHP_FUNCTION(runkit_method_rename)
 	}
 
 	ancestor_class = php_runkit_locate_scope(ce, fe, methodname, methodname_len);
-	zend_hash_apply_with_arguments(EG(class_table), (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, methodname, 
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, methodname, 
 methodname_len);
 
 	func = *fe;
-	PHP_RUNKIT_FUNCTION_ADD_REF(&func);
+	function_add_ref(&func);
 	efree(func.common.function_name);
 	func.common.function_name = estrndup(newname, newname_len + 1);
 

@@ -42,7 +42,7 @@ int php_runkit_check_call_stack(zend_op_array *op_array TSRMLS_DC)
 
 static void php_runkit_hash_key_dtor(zend_hash_key *hash_key)
 {
-	efree(PHP_RUNKIT_HASH_KEY(hash_key));
+	efree(hash_key->arKey);
 }
 
 /* Maintain order */
@@ -52,11 +52,11 @@ static void php_runkit_hash_key_dtor(zend_hash_key *hash_key)
 
 /* {{{ php_runkit_fetch_function
  */
-static int php_runkit_fetch_function(int fname_type, char *fname, int fname_len, zend_function **pfe, int flag TSRMLS_DC)
+static int php_runkit_fetch_function(char *fname, int fname_len, zend_function **pfe, int flag TSRMLS_DC)
 {
 	zend_function *fe;
 
-	PHP_RUNKIT_STRTOLOWER(fname);
+	php_strtolower(fname, fname_len);
 
 	if (zend_hash_find(EG(function_table), fname, fname_len + 1, (void**)&fe) == FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s() not found", fname);
@@ -85,20 +85,16 @@ static int php_runkit_fetch_function(int fname_type, char *fname, int fname_len,
 			ALLOC_HASHTABLE(RUNKIT_G(replaced_internal_functions));
 			zend_hash_init(RUNKIT_G(replaced_internal_functions), 4, NULL, NULL, 0);
 		}
-#if PHP_MAJOR_VERSION >= 6
-		zend_u_hash_add(RUNKIT_G(replaced_internal_functions), fname_type, fname, fname_len + 1, (void*)fe, sizeof(zend_function), NULL);
-#else
 		zend_hash_add(RUNKIT_G(replaced_internal_functions), fname, fname_len + 1, (void*)fe, sizeof(zend_function), NULL);
-#endif
 		if (flag >= PHP_RUNKIT_FETCH_FUNCTION_RENAME) {
 			zend_hash_key hash_key;
 
 			if (!RUNKIT_G(misplaced_internal_functions)) {
 				ALLOC_HASHTABLE(RUNKIT_G(misplaced_internal_functions));
-				zend_hash_init(RUNKIT_G(misplaced_internal_functions), 4, NULL, php_runkit_hash_key_dtor, 0);
+				zend_hash_init(RUNKIT_G(misplaced_internal_functions), 4, NULL, (dtor_func_t)php_runkit_hash_key_dtor, 0);
 			}
 			hash_key.nKeyLength = fname_len + 1;
-			PHP_RUNKIT_HASH_KEY(&hash_key) = estrndup(fname, PHP_RUNKIT_HASH_KEYLEN(&hash_key));
+			hash_key.arKey = estrndup(fname, hash_key.nKeyLength);
 			zend_hash_next_index_insert(RUNKIT_G(misplaced_internal_functions), (void*)&hash_key, sizeof(zend_hash_key), NULL);
 		}
 	}
@@ -239,11 +235,7 @@ int php_runkit_destroy_misplaced_functions(zend_hash_key *hash_key TSRMLS_DC)
 		return ZEND_HASH_APPLY_REMOVE;
 	}
 
-#if PHP_MAJOR_VERSION >= 6
-	zend_u_hash_del(EG(function_table), hash_key->type, hash_key->u.unicode, hash_key->nKeyLength);
-#else
 	zend_hash_del(EG(function_table), hash_key->arKey, hash_key->nKeyLength);
-#endif
 
 	return ZEND_HASH_APPLY_REMOVE;
 }
@@ -251,20 +243,18 @@ int php_runkit_destroy_misplaced_functions(zend_hash_key *hash_key TSRMLS_DC)
 
 /* {{{ php_runkit_restore_internal_functions
 	Cleanup after modifications to internal functions */
-int php_runkit_restore_internal_functions(zend_internal_function *fe, int num_args, va_list args, zend_hash_key *hash_key)
+int php_runkit_restore_internal_functions(zend_internal_function *fe ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key)
 {
+#ifndef ZEND_ENGINE_2_3
 	void ***tsrm_ls = va_arg(args, void***); /* NULL when !defined(ZTS) */
+#endif
 
 	if (!hash_key->nKeyLength) {
 		/* Nonsense, skip it */
 		return ZEND_HASH_APPLY_REMOVE;
 	}
 
-#if PHP_MAJOR_VERSION >= 6
-	zend_u_hash_update(EG(function_table), hash_key->type, hash_key->u.unicode, hash_key->nKeyLength, (void*)fe, sizeof(zend_function), NULL);
-#else
 	zend_hash_update(EG(function_table), hash_key->arKey, hash_key->nKeyLength, (void*)fe, sizeof(zend_function), NULL);
-#endif
 
 	return ZEND_HASH_APPLY_REMOVE;
 }
@@ -279,33 +269,24 @@ int php_runkit_restore_internal_functions(zend_internal_function *fe, int num_ar
 	There's nothing about this function that's better than eval(), it's here for completeness */
 PHP_FUNCTION(runkit_function_add)
 {
-	PHP_RUNKIT_DECL_STRING_PARAM(funcname)
-	PHP_RUNKIT_DECL_STRING_PARAM(arglist)
-	PHP_RUNKIT_DECL_STRING_PARAM(code)
+	char *funcname, *arglist, *code;
+	int funcname_len, arglist_len, code_len;
 	char *delta = NULL, *delta_desc;
 	int retval;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,
-			PHP_RUNKIT_STRING_SPEC "/" PHP_RUNKIT_STRING_SPEC PHP_RUNKIT_STRING_SPEC,
-			PHP_RUNKIT_STRING_PARAM(funcname),
-			PHP_RUNKIT_STRING_PARAM(arglist),
-			PHP_RUNKIT_STRING_PARAM(code)) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s/ss",
+			&funcname, &funcname_len, &arglist, &arglist_len, &code, &code_len) == FAILURE) {
 		RETURN_FALSE;
 	}
 
-	/* UTODO */
-	PHP_RUNKIT_STRTOLOWER(funcname);
+	php_strtolower(funcname, funcname_len);
 
 	if (zend_hash_exists(EG(function_table), funcname, funcname_len + 1)) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Function %s() already exists", funcname);
 		RETURN_FALSE;
 	}
 
-#if PHP_MAJOR_VERSION >= 6
-	spprintf(&delta, 0, "function %R(%R){%R}", funcname_type, funcname, arglist_type, arglist, code_type, code);
-#else
 	spprintf(&delta, 0, "function %s(%s){%s}", funcname, arglist, code);
-#endif
 
 	if (!delta) {
 		RETURN_FALSE;
@@ -324,13 +305,14 @@ PHP_FUNCTION(runkit_function_add)
  */
 PHP_FUNCTION(runkit_function_remove)
 {
-	PHP_RUNKIT_DECL_STRING_PARAM(funcname)
+	char *funcname;
+	int funcname_len;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, PHP_RUNKIT_STRING_SPEC "/", PHP_RUNKIT_STRING_PARAM(funcname)) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s/", &funcname, &funcname_len) == FAILURE) {
 		RETURN_FALSE;
 	}
 
-	if (php_runkit_fetch_function(PHP_RUNKIT_STRING_TYPE(funcname), funcname, funcname_len, NULL, PHP_RUNKIT_FETCH_FUNCTION_REMOVE TSRMLS_CC) == FAILURE) {
+	if (php_runkit_fetch_function(funcname, funcname_len, NULL, PHP_RUNKIT_FETCH_FUNCTION_REMOVE TSRMLS_CC) == FAILURE) {
 		RETURN_FALSE;
 	}
 
@@ -343,29 +325,28 @@ PHP_FUNCTION(runkit_function_remove)
 PHP_FUNCTION(runkit_function_rename)
 {
 	zend_function *fe, func;
-	PHP_RUNKIT_DECL_STRING_PARAM(sfunc)
-	PHP_RUNKIT_DECL_STRING_PARAM(dfunc)
+	char *sfunc, *dfunc;
+	int sfunc_len, dfunc_len;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, PHP_RUNKIT_STRING_SPEC "/" PHP_RUNKIT_STRING_SPEC "/",
-			PHP_RUNKIT_STRING_PARAM(sfunc), PHP_RUNKIT_STRING_PARAM(dfunc)) == FAILURE ) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s/s/",
+			&sfunc, &sfunc_len, &dfunc, &dfunc_len) == FAILURE) {
 		RETURN_FALSE;
 	}
 
-	/* UTODO */
-	PHP_RUNKIT_STRTOLOWER(dfunc);
+	php_strtolower(dfunc, dfunc_len);
 
 	if (zend_hash_exists(EG(function_table), dfunc, dfunc_len + 1)) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s() already exists", dfunc);
 		RETURN_FALSE;
 	}
 
-	if (php_runkit_fetch_function(PHP_RUNKIT_STRING_TYPE(sfunc), sfunc, sfunc_len, &fe, PHP_RUNKIT_FETCH_FUNCTION_RENAME TSRMLS_CC) == FAILURE) {
+	if (php_runkit_fetch_function(sfunc, sfunc_len, &fe, PHP_RUNKIT_FETCH_FUNCTION_RENAME TSRMLS_CC) == FAILURE) {
 		RETURN_FALSE;
 	}
 
 	if (fe->type == ZEND_USER_FUNCTION) {
 		func = *fe;
-		PHP_RUNKIT_FUNCTION_ADD_REF(&func);
+		function_add_ref(&func);
 	}
 
 	if (zend_hash_del(EG(function_table), sfunc, sfunc_len + 1) == FAILURE) {
@@ -393,22 +374,19 @@ PHP_FUNCTION(runkit_function_rename)
  */
 PHP_FUNCTION(runkit_function_redefine)
 {
-	PHP_RUNKIT_DECL_STRING_PARAM(funcname)
-	PHP_RUNKIT_DECL_STRING_PARAM(arglist)
-	PHP_RUNKIT_DECL_STRING_PARAM(code)
+	char *funcname, *arglist, *code;
+	int funcname_len, arglist_len, code_len;
 	char *delta = NULL, *delta_desc;
 	int retval;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,
-			PHP_RUNKIT_STRING_SPEC "/" PHP_RUNKIT_STRING_SPEC PHP_RUNKIT_STRING_SPEC,
-			PHP_RUNKIT_STRING_PARAM(funcname),
-			PHP_RUNKIT_STRING_PARAM(arglist),
-			PHP_RUNKIT_STRING_PARAM(code)) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s/ss",
+			&funcname, &funcname_len,
+			&arglist, &arglist_len,
+			&code, &code_len) == FAILURE) {
 		RETURN_FALSE;
 	}
 
-	/* UTODO */
-	if (php_runkit_fetch_function(PHP_RUNKIT_STRING_TYPE(funcname), funcname, funcname_len, NULL, PHP_RUNKIT_FETCH_FUNCTION_REMOVE TSRMLS_CC) == FAILURE) {
+	if (php_runkit_fetch_function(funcname, funcname_len, NULL, PHP_RUNKIT_FETCH_FUNCTION_REMOVE TSRMLS_CC) == FAILURE) {
 		RETURN_FALSE;
 	}
 
@@ -436,39 +414,36 @@ PHP_FUNCTION(runkit_function_redefine)
  */
 PHP_FUNCTION(runkit_function_copy)
 {
-	PHP_RUNKIT_DECL_STRING_PARAM(sfunc)
-	PHP_RUNKIT_DECL_STRING_PARAM(dfunc)
+	char *sfunc, *dfunc;
+	int sfunc_len, dfunc_len;
 	zend_function *fe;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, 
-			PHP_RUNKIT_STRING_SPEC "/" PHP_RUNKIT_STRING_SPEC "/",
-			PHP_RUNKIT_STRING_PARAM(sfunc),
-			PHP_RUNKIT_STRING_PARAM(dfunc)) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s/s/",
+			&sfunc, &sfunc_len, &dfunc, &dfunc_len) == FAILURE) {
 		RETURN_FALSE;
 	}
 
-	/* UTODO */
-	PHP_RUNKIT_STRTOLOWER(dfunc);
+	php_strtolower(dfunc, dfunc_len);
 
 	if (zend_hash_exists(EG(function_table), dfunc, dfunc_len + 1)) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s() already exists", dfunc);
 		RETURN_FALSE;
 	}
 
-	if (php_runkit_fetch_function(PHP_RUNKIT_STRING_TYPE(sfunc), sfunc, sfunc_len, &fe, PHP_RUNKIT_FETCH_FUNCTION_INSPECT TSRMLS_CC) == FAILURE) {
+	if (php_runkit_fetch_function(sfunc, sfunc_len, &fe, PHP_RUNKIT_FETCH_FUNCTION_INSPECT TSRMLS_CC) == FAILURE) {
 		RETURN_FALSE;
 	}
 
 	if (fe->type == ZEND_USER_FUNCTION) {
-		PHP_RUNKIT_FUNCTION_ADD_REF(fe);
+		function_add_ref(fe);
 	} else {
 		zend_hash_key hash_key;
 
-		hash_key.nKeyLength = PHP_RUNKIT_STRING_LEN(dfunc, 1);
-		PHP_RUNKIT_HASH_KEY(&hash_key) = estrndup(dfunc, PHP_RUNKIT_HASH_KEYLEN(&hash_key));
+		hash_key.nKeyLength = dfunc_len + 1;
+		hash_key.arKey = estrndup(dfunc, hash_key.nKeyLength);
 		if (!RUNKIT_G(misplaced_internal_functions)) {
 			ALLOC_HASHTABLE(RUNKIT_G(misplaced_internal_functions));
-			zend_hash_init(RUNKIT_G(misplaced_internal_functions), 4, NULL, php_runkit_hash_key_dtor, 0);
+			zend_hash_init(RUNKIT_G(misplaced_internal_functions), 4, NULL, (dtor_func_t)php_runkit_hash_key_dtor, 0);
 		}
 		zend_hash_next_index_insert(RUNKIT_G(misplaced_internal_functions), (void*)&hash_key, sizeof(zend_hash_key), NULL);
 	}

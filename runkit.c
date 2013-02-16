@@ -196,7 +196,7 @@ static void _php_runkit_feature_constant(const char *name, size_t name_len, zend
 PHP_MINIT_FUNCTION(runkit)
 {
 #ifdef ZTS
-	ts_allocate_id(&runkit_globals_id, sizeof(zend_runkit_globals), php_runkit_globals_ctor, NULL);
+	ts_allocate_id(&runkit_globals_id, sizeof(zend_runkit_globals), (ts_allocate_ctor)php_runkit_globals_ctor, NULL);
 #else
 	php_runkit_globals_ctor(&runkit_globals);
 #endif
@@ -358,13 +358,23 @@ static int php_runkit_superglobal_dtor(char *pDest TSRMLS_DC)
 /* }}} */
 #endif /* PHP_RUNKIT_SUPERGLOBALS */
 
+/* php_runkit_restore_internal_functions needs tsrm_ls
+ * In PHP 5.3 we have that as part of the standard sig
+ * Prior to that we need to make it one of the var args
+ */
+#ifdef ZEND_ENGINE_2_3
+# define RESTORE_ARGS 0
+#else
+# define RESTORE_ARGS 1, RUNKIT_TSRMLS_C
+#endif
+
 /* {{{ PHP_RSHUTDOWN_FUNCTION
  */
 PHP_RSHUTDOWN_FUNCTION(runkit)
 {
 #ifdef PHP_RUNKIT_SUPERGLOBALS
 	if (RUNKIT_G(superglobals)) {
-		zend_hash_apply(RUNKIT_G(superglobals), php_runkit_superglobal_dtor TSRMLS_CC);
+		zend_hash_apply(RUNKIT_G(superglobals), (apply_func_t)php_runkit_superglobal_dtor TSRMLS_CC);
 
 		zend_hash_destroy(RUNKIT_G(superglobals));
 		FREE_HASHTABLE(RUNKIT_G(superglobals));
@@ -374,7 +384,7 @@ PHP_RSHUTDOWN_FUNCTION(runkit)
 #ifdef PHP_RUNKIT_MANIPULATION
 	if (RUNKIT_G(misplaced_internal_functions)) {
 		/* Just wipe out rename-to targets before restoring originals */
-		zend_hash_apply(RUNKIT_G(misplaced_internal_functions), php_runkit_destroy_misplaced_functions TSRMLS_CC);
+		zend_hash_apply(RUNKIT_G(misplaced_internal_functions), (apply_func_t)php_runkit_destroy_misplaced_functions TSRMLS_CC);
 		zend_hash_destroy(RUNKIT_G(misplaced_internal_functions));
 		FREE_HASHTABLE(RUNKIT_G(misplaced_internal_functions));
 		RUNKIT_G(misplaced_internal_functions) = NULL;
@@ -382,7 +392,7 @@ PHP_RSHUTDOWN_FUNCTION(runkit)
 
 	if (RUNKIT_G(replaced_internal_functions)) {
 		/* Restore internal functions */
-		zend_hash_apply_with_arguments(RUNKIT_G(replaced_internal_functions), php_runkit_restore_internal_functions, 1, RUNKIT_TSRMLS_C);
+		zend_hash_apply_with_arguments(RUNKIT_G(replaced_internal_functions) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_restore_internal_functions, RESTORE_ARGS);
 		zend_hash_destroy(RUNKIT_G(replaced_internal_functions));
 		FREE_HASHTABLE(RUNKIT_G(replaced_internal_functions));
 		RUNKIT_G(replaced_internal_functions) = NULL;

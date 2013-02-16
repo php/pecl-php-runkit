@@ -6,10 +6,13 @@ Runkit_Sandbox() - disable_classes test
       if(!function_exists("runkit_lint")) print "skip"; ?>
 --FILE--
 <?php
+function output_handler($msg) {
+  if (strncmp(trim($msg), 'Warning: ', 9) == 0) echo "True";
+}
+
 $php = new Runkit_Sandbox(array('disable_classes'=>'stdClass'));
+$php['output_handler'] = 'output_handler';
 $php->ini_set('html_errors',false);
 $php->eval('$a = new stdClass();');
---EXPECTF--
-Fatal error: Class 'stdClass' not found in Unknown(0) : Runkit_Sandbox Eval Code on line 1
-
-Warning: Runkit_Sandbox::eval(): Error executing sandbox code in %s on line %d
+--EXPECT--
+True

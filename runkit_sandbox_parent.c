@@ -520,7 +520,7 @@ PHP_METHOD(Runkit_Sandbox_Parent,die)
 
 /* {{{ php_runkit_sandbox_parent_read_property
 	read_property handler */
-static zval *php_runkit_sandbox_parent_read_property(zval *object, zval *member, int type TSRMLS_DC)
+static zval *php_runkit_sandbox_parent_read_property(zval *object, zval *member, int type PHP_RUNKIT_LITERAL_DC TSRMLS_DC)
 {
 	php_runkit_sandbox_parent_object *objval = PHP_RUNKIT_SANDBOX_PARENT_FETCHBOX(object);
 	zval *tmp_member = NULL;
@@ -577,7 +577,7 @@ static zval *php_runkit_sandbox_parent_read_property(zval *object, zval *member,
 
 /* {{{ php_runkit_sandbox_parent_write_property
 	write_property handler */
-static void php_runkit_sandbox_parent_write_property(zval *object, zval *member, zval *value TSRMLS_DC)
+static void php_runkit_sandbox_parent_write_property(zval *object, zval *member, zval *value PHP_RUNKIT_LITERAL_DC TSRMLS_DC)
 {
 	php_runkit_sandbox_parent_object *objval = PHP_RUNKIT_SANDBOX_PARENT_FETCHBOX(object);
 	zval *tmp_member = NULL;
@@ -616,7 +616,7 @@ static void php_runkit_sandbox_parent_write_property(zval *object, zval *member,
 
 /* {{{ php_runkit_sandbox_parent_has_property
 	has_property handler */
-static int php_runkit_sandbox_parent_has_property(zval *object, zval *member, int has_set_exists TSRMLS_DC)
+static int php_runkit_sandbox_parent_has_property(zval *object, zval *member, int has_set_exists PHP_RUNKIT_LITERAL_DC TSRMLS_DC)
 {
 	php_runkit_sandbox_parent_object* objval = PHP_RUNKIT_SANDBOX_PARENT_FETCHBOX(object);
 	zval member_copy;
@@ -694,7 +694,7 @@ static int php_runkit_sandbox_parent_has_property(zval *object, zval *member, in
 
 /* {{{ php_runkit_sandbox_parent_unset_property
 	unset_property handler */
-static void php_runkit_sandbox_parent_unset_property(zval *object, zval *member TSRMLS_DC)
+static void php_runkit_sandbox_parent_unset_property(zval *object, zval *member PHP_RUNKIT_LITERAL_DC TSRMLS_DC)
 {
 	php_runkit_sandbox_parent_object *objval = PHP_RUNKIT_SANDBOX_PARENT_FETCHBOX(object);
 	zval member_copy;

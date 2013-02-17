@@ -3,7 +3,7 @@ runkit_method_rename() function
 --SKIPIF--
 <?php if(!extension_loaded("runkit") || !RUNKIT_FEATURE_MANIPULATION) print "skip"; ?>
 --INI--
-error_reporting=E_ALL
+error_reporting=E_ALL & ~E_STRICT
 display_errors=on
 --FILE--
 <?php

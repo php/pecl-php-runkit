@@ -22,6 +22,12 @@
 
 #ifdef PHP_RUNKIT_MANIPULATION
 
+#ifdef ZEND_ENGINE_2_4
+# define DEFPROP_PI_CC , pi
+#else
+# define DEFPROP_PI_CC
+#endif
+
 /* {{{ php_runkit_update_children_def_props
 	Scan the class_table for children of the class just updated */
 int php_runkit_update_children_def_props(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key)
@@ -30,6 +36,9 @@ int php_runkit_update_children_def_props(zend_class_entry *ce ZEND_HASH_APPLY_AR
 	zval *p = va_arg(args, zval*);
 	char *pname = va_arg(args, char*);
 	int pname_len = va_arg(args, int);
+#ifdef ZEND_ENGINE_2_4
+	zend_property_info *pi = va_arg(args, zend_property_info*);
+#endif
 #ifndef ZEND_ENGINE_2_3
 	TSRMLS_FETCH();
 #endif
@@ -44,14 +53,33 @@ int php_runkit_update_children_def_props(zend_class_entry *ce ZEND_HASH_APPLY_AR
 	}
 
 	/* Process children of this child */
-	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_def_props, 4, ce, p, pname, pname_len);
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_def_props, num_args, ce, p, pname, pname_len DEFPROP_PI_CC);
 
+#ifdef ZEND_ENGINE_2_4
+{
+	ZVAL_ADDREF(p);
+	zend_property_info *oldpi;
+	if (zend_hash_find(&ce->properties_info, pname, pname_len + 1, (void**)&oldpi) == SUCCESS) {
+		zval_ptr_dtor(&(ce->default_properties_table[oldpi->offset]));
+		ce->default_properties_table[oldpi->offset] = p;
+	} else {
+		zend_property_info newpi = *pi;
+		newpi.name = estrndup(pi->name, pi->name_length);
+		if (pi->doc_comment) newpi.doc_comment = estrndup(pi->doc_comment, pi->doc_comment_len);
+		newpi.offset = ce->default_properties_count++;
+		ce->default_properties_table = safe_erealloc(ce->default_properties_table, ce->default_properties_count, sizeof(zval*), 0);
+		ce->default_properties_table[newpi.offset] = p;
+		zend_hash_add(&ce->properties_info, pname, pname_len + 1, &newpi, sizeof(zend_property_info), (void**)&oldpi);
+	}
+}
+#else /* PHP <= 5.3 */
 	zend_hash_del(&ce->default_properties, pname, pname_len + 1);
 	ZVAL_ADDREF(p);
 	if (zend_hash_add(&ce->default_properties, pname, pname_len + 1, p, sizeof(zval*), NULL) ==  FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Error updating child class");
 		return ZEND_HASH_APPLY_KEEP;
 	}
+#endif
 
 	return ZEND_HASH_APPLY_KEEP;
 }
@@ -88,10 +116,45 @@ static int php_runkit_def_prop_add(char *classname, int classname_len, char *pro
 		return FAILURE;
 	}
 
+	MAKE_STD_ZVAL(copyval);
+	ZVAL_ZVAL(copyval, value, 1, 0);
+
+#ifdef ZEND_ENGINE_2_4
+{
+	zend_property_info newpi = { 0 };
+	if (zend_hash_exists(&ce->properties_info, key, key_len + 1)) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s::%s already exists", classname, propname);
+		zval_ptr_dtor(&copyval);
+		return FAILURE;
+	}
+
+	newpi.flags = (visibility == ZEND_ACC_PRIVATE) ? ZEND_ACC_PRIVATE : ((visibility == ZEND_ACC_PROTECTED) ? ZEND_ACC_PROTECTED : ZEND_ACC_PUBLIC);
+	newpi.name = estrndup(key, key_len);
+	newpi.name_length = key_len;
+	newpi.h = zend_hash_func(key, key_len);
+	newpi.offset = ce->default_properties_count++;
+	ce->default_properties_table = safe_erealloc(ce->default_properties_table, ce->default_properties_count, sizeof(zval*), 0);
+	ce->default_properties_table[newpi.offset] = copyval;
+	newpi.doc_comment_len = spprintf((char**)&(newpi.doc_comment), 0, "Added by runkit from %s %s%s%s() line %ld",
+	                                 EG(current_execute_data)->op_array->filename,
+	                                 EG(current_execute_data)->op_array->scope ? EG(current_execute_data)->op_array->scope->name : "",
+	                                 EG(current_execute_data)->op_array->scope ? "::" : "",
+	                                 EG(current_execute_data)->op_array->function_name,
+	                                 EG(current_execute_data)->opline->lineno);
+	newpi.ce = ce;
+
+	if (FAILURE == zend_hash_add(&ce->properties_info, key, key_len + 1, &newpi, sizeof(zend_property_info), NULL)) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to add default property to class definition");
+		zval_ptr_dtor(&copyval);
+		return FAILURE;
+	}
+}
+#else /* PHP <= 5.3 */
 	/* Check for existing property by this name */
 	/* Existing public? */
 	if (zend_hash_exists(&ce->default_properties, key, key_len + 1)) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s::%s already exists", classname, propname);
+		zval_ptr_dtor(&copyval);
 		return FAILURE;
 	}
 
@@ -101,6 +164,7 @@ static int php_runkit_def_prop_add(char *classname, int classname_len, char *pro
 	if (zend_hash_exists(&ce->default_properties, temp, temp_len + 1)) {
 		efree(temp);
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s::%s already exists", classname, propname);
+		zval_ptr_dtor(&copyval);
 		return FAILURE;
 	}
 	if (visibility == ZEND_ACC_PROTECTED) {
@@ -115,6 +179,7 @@ static int php_runkit_def_prop_add(char *classname, int classname_len, char *pro
 	if (zend_hash_exists(&ce->default_properties, temp, temp_len + 1)) {
 		efree(temp);
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s::%s already exists", classname, propname);
+		zval_ptr_dtor(&copyval);
 		return FAILURE;
 	}
 	if (visibility == ZEND_ACC_PRIVATE) {
@@ -123,25 +188,14 @@ static int php_runkit_def_prop_add(char *classname, int classname_len, char *pro
 	} else {
 		efree(temp);
 	}
-#endif
-
-	ALLOC_ZVAL(copyval);
-	*copyval = *value;
-	zval_copy_ctor(copyval);
-
-#if (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 3) || (PHP_MAJOR_VERSION >= 6)
-	Z_SET_REFCOUNT_P(copyval, 1);
-	Z_UNSET_ISREF_P(copyval);
-#else
-	copyval->refcount = 1;
-	copyval->is_ref = 0;
-#endif
+#endif /* ZEND_ENGINE_2 */
 
 	if (zend_hash_add(&ce->default_properties, key, key_len + 1, &copyval, sizeof(zval *), NULL) == FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to add default property to class definition");
 		zval_ptr_dtor(&copyval);
 		return FAILURE;
 	}
+#endif /* ZEND_ENGINE_2_4 */
 
 #ifdef ZEND_ENGINE_2
 	if (visibility != ZEND_ACC_PRIVATE) {

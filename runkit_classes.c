@@ -24,7 +24,7 @@
 /* {{{ php_runkit_remove_inherited_methods */
 static int php_runkit_remove_inherited_methods(zend_function *fe, zend_class_entry *ce TSRMLS_DC)
 {
-	char *function_name = fe->common.function_name;
+	char *function_name = (char*)fe->common.function_name;
 	int function_name_len = strlen(function_name);
 	zend_class_entry *ancestor_class = php_runkit_locate_scope(ce, fe, function_name, function_name_len);
 
@@ -71,7 +71,7 @@ PHP_FUNCTION(runkit_class_emancipate)
 	Inherit methods from a new ancestor */
 static int php_runkit_inherit_methods(zend_function *fe, zend_class_entry *ce TSRMLS_DC)
 {
-	char *function_name = fe->common.function_name;
+	char *function_name = (char*)fe->common.function_name;
 	int function_name_len = strlen(function_name);
 	zend_class_entry *ancestor_class = php_runkit_locate_scope(ce, fe, function_name, function_name_len);
 

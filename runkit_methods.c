@@ -297,7 +297,7 @@ static void php_runkit_method_add_or_update(INTERNAL_FUNCTION_PARAMETERS, int ad
 	}
 
 #ifndef ZEND_ENGINE_2
-	if (argc > 4) {
+	if ((argc > 4) && flags) {
 		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Flags parameter ignored in PHP versions prior to 5.0.0");
 	}
 #endif
@@ -330,7 +330,7 @@ static void php_runkit_method_add_or_update(INTERNAL_FUNCTION_PARAMETERS, int ad
 
 	func = *fe;
 	function_add_ref(&func);
-	efree(func.common.function_name);
+	efree((void*)func.common.function_name);
 	func.common.function_name = estrndup(methodname, methodname_len);
 #ifdef ZEND_ENGINE_2
 	func.common.scope = ce;
@@ -346,7 +346,7 @@ static void php_runkit_method_add_or_update(INTERNAL_FUNCTION_PARAMETERS, int ad
 		func.common.fn_flags |= ZEND_ACC_PUBLIC;
 	}
 
-	func.common.fn_flags |= ZEND_ACC_ALLOW_STATIC;
+	func.common.fn_flags |= flags & (ZEND_ACC_STATIC|ZEND_ACC_ALLOW_STATIC);
 #endif
 
 	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, ancestor_class, ce, &func, methodname, 
@@ -510,7 +510,7 @@ methodname_len);
 
 	func = *fe;
 	function_add_ref(&func);
-	efree(func.common.function_name);
+	efree((void*)func.common.function_name);
 	func.common.function_name = estrndup(newname, newname_len + 1);
 
 	if (zend_hash_add(&ce->function_table, newname, newname_len + 1, &func, sizeof(zend_function), NULL) == FAILURE) {

@@ -12,8 +12,19 @@ class runkit_class {
 		echo "a is $a\n";
 	}
 }
+
+if (version_compare(phpversion(), "5.4.0") >= 0) {
+  /* Ignore ZEND_ACC_ALLOW_STATIC strict notice */
+  error_reporting(E_ALL & ~E_STRICT);
+}
+
 runkit_class::runkit_method('foo');
-runkit_method_redefine('runkit_class','runkit_method','$b', 'echo "b is $b\n";');
+
+error_reporting(E_ALL);
+
+runkit_method_redefine('runkit_class','runkit_method',
+                       '$b', 'echo "b is $b\n";',
+                       RUNKIT_ACC_PUBLIC | RUNKIT_ACC_STATIC);
 runkit_class::runkit_method('bar');
 ?>
 --EXPECT--

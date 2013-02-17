@@ -41,6 +41,9 @@
 #define PHP_RUNKIT_IMPORT_CLASSES			(PHP_RUNKIT_IMPORT_CLASS_METHODS|PHP_RUNKIT_IMPORT_CLASS_CONSTS|PHP_RUNKIT_IMPORT_CLASS_PROPS)
 #define PHP_RUNKIT_IMPORT_OVERRIDE			0x0010
 
+#if ZEND_MODULE_API_NO > 20100524
+#define ZEND_ENGINE_2_4
+#endif
 #if ZEND_MODULE_API_NO > 20090625
 #define ZEND_ENGINE_2_3
 #endif
@@ -61,6 +64,18 @@
 # define ZEND_FH_DTOR_TSRMLS_CC
 # define ZEND_HASH_APPLY_ARGS_TSRMLS_CC
 # define ZEND_HASH_APPLY_ARGS_TSRMLS_DC
+#endif
+
+#ifdef ZEND_ENGINE_2_4
+# define PHP_RUNKIT_OP_TYPE(zop) (zop##_type)
+# define PHP_RUNKIT_OP_U(zop) (zop)
+# define PHP_RUNKIT_LITERAL_DC , const struct _zend_literal *key
+# define PHP_RUNKIT_LITERAL_CC , key
+#else
+# define PHP_RUNKIT_OP_TYPE(zop) ((zop).op_type)
+# define PHP_RUNKIT_OP_U(zop) ((zop).u)
+# define PHP_RUNKIT_LITERAL_DC
+# define PHP_RUNKIT_LITERAL_CC
 #endif
 
 /* The TSRM interpreter patch required by runkit_sandbox was added in 5.1, but this package includes diffs for older versions

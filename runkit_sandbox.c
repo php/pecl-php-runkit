@@ -96,7 +96,10 @@ int php_runkit_sandbox_array_deep_copy(zval **value ZEND_HASH_APPLY_ARGS_TSRMLS_
  */
 inline void php_runkit_sandbox_ini_override(php_runkit_sandbox_object *objval, HashTable *options TSRMLS_DC)
 {
-	zend_bool safe_mode, safe_mode_gid, allow_url_fopen;
+#ifndef ZEND_ENGINE_2_4
+	zend_bool safe_mode, safe_mode_gid;
+#endif
+	zend_bool allow_url_fopen;
 	char open_basedir[MAXPATHLEN] = {0}, safe_mode_include_dir[MAXPATHLEN] = {0};
 	zval **tmpzval;
 
@@ -106,18 +109,21 @@ inline void php_runkit_sandbox_ini_override(php_runkit_sandbox_object *objval, H
 		/* Check current settings in parent context */
 		TSRMLS_FETCH_FROM_CTX(objval->parent_context);
 
+#ifndef ZEND_ENGINE_2_4
 		safe_mode = PG(safe_mode);
 		safe_mode_gid = PG(safe_mode_gid);
-		if (PG(open_basedir) && *PG(open_basedir)) {
-			VCWD_REALPATH(PG(open_basedir), open_basedir);
-		}
 		if (PG(safe_mode_include_dir) && *PG(safe_mode_include_dir)) {
 			VCWD_REALPATH(PG(safe_mode_include_dir), safe_mode_include_dir);
+		}
+#endif
+		if (PG(open_basedir) && *PG(open_basedir)) {
+			VCWD_REALPATH(PG(open_basedir), open_basedir);
 		}
 		allow_url_fopen = PG(allow_url_fopen);
 	}
 	tsrm_set_interpreter_context(objval->context);
 
+#ifndef ZEND_ENGINE_2_4
 	/* safe_mode only goes on */
 	if (!safe_mode &&
 		zend_hash_find(options, "safe_mode", sizeof("safe_mode"), (void**)&tmpzval) == SUCCESS) {
@@ -173,6 +179,7 @@ inline void php_runkit_sandbox_ini_override(php_runkit_sandbox_object *objval, H
 			}
 		}
 	}
+#endif /* ZEND_ENGINE_2_4 */
 
 	/* open_basedir goes deeper only */
 	if (zend_hash_find(options, "open_basedir", sizeof("open_basedir"), (void**)&tmpzval) == SUCCESS &&
@@ -256,15 +263,23 @@ inline void php_runkit_sandbox_ini_override(php_runkit_sandbox_object *objval, H
 		while ((p = strchr(s, ','))) {
 			if (p - s) {
 				*p = '\0';
+#ifdef ZEND_ENGINE_2_4
+				zend_register_auto_global(s, p - s, 0, NULL TSRMLS_CC);
+#else
 				zend_register_auto_global(s, p - s, NULL TSRMLS_CC);
 				zend_auto_global_disable_jit(s, p - s TSRMLS_CC);
+#endif
 				*p = ',';
 			}
 			s = p + 1;
 		}
 		len = strlen(s);
+#ifdef ZEND_ENGINE_2_4
+		zend_register_auto_global(s, p - s, 0, NULL TSRMLS_CC);
+#else
 		zend_register_auto_global(s, len, NULL TSRMLS_CC);
 		zend_auto_global_disable_jit(s, len TSRMLS_CC);
+#endif
 	}
 
 	/* May only turn off */
@@ -680,7 +695,7 @@ PHP_METHOD(Runkit_Sandbox,die)
 
 /* {{{ php_runkit_sandbox_read_property
 	read_property handler */
-static zval *php_runkit_sandbox_read_property(zval *object, zval *member, int type TSRMLS_DC)
+static zval *php_runkit_sandbox_read_property(zval *object, zval *member, int type PHP_RUNKIT_LITERAL_DC TSRMLS_DC)
 {
 	php_runkit_sandbox_object *objval = PHP_RUNKIT_SANDBOX_FETCHBOX(object);
 	zval *tmp_member = NULL;
@@ -739,7 +754,7 @@ static zval *php_runkit_sandbox_read_property(zval *object, zval *member, int ty
 
 /* {{{ php_runkit_sandbox_write_property
 	write_property handler */
-static void php_runkit_sandbox_write_property(zval *object, zval *member, zval *value TSRMLS_DC)
+static void php_runkit_sandbox_write_property(zval *object, zval *member, zval *value PHP_RUNKIT_LITERAL_DC TSRMLS_DC)
 {
 	php_runkit_sandbox_object *objval = PHP_RUNKIT_SANDBOX_FETCHBOX(object);
 	zval *tmp_member = NULL;
@@ -780,7 +795,7 @@ static void php_runkit_sandbox_write_property(zval *object, zval *member, zval *
 
 /* {{{ php_runkit_sandbox_has_property
 	has_property handler */
-static int php_runkit_sandbox_has_property(zval *object, zval *member, int has_set_exists TSRMLS_DC)
+static int php_runkit_sandbox_has_property(zval *object, zval *member, int has_set_exists PHP_RUNKIT_LITERAL_DC TSRMLS_DC)
 {
 	php_runkit_sandbox_object* objval;
 	zval member_copy;
@@ -857,7 +872,7 @@ static int php_runkit_sandbox_has_property(zval *object, zval *member, int has_s
 
 /* {{{ php_runkit_sandbox_unset_property
 	unset_property handler */
-static void php_runkit_sandbox_unset_property(zval *object, zval *member TSRMLS_DC)
+static void php_runkit_sandbox_unset_property(zval *object, zval *member PHP_RUNKIT_LITERAL_DC TSRMLS_DC)
 {
 	php_runkit_sandbox_object *objval;
 	zval member_copy;
@@ -1189,15 +1204,25 @@ static void php_runkit_sandbox_sapi_register_server_variables(zval *track_vars_a
 }
 /* }}} */
 
+#ifdef ZEND_ENGINE_2_4
+# define LOG_MESSAGE_TSRMLS_DC TSRMLS_DC
+# define LOG_MESSAGE_TSRMLS_CC TSRMLS_CC
+#else
+# define LOG_MESSAGE_TSRMLS_DC
+# define LOG_MESSAGE_TSRMLS_CC
+#endif
+
 /* {{{ php_runkit_sandbox_sapi_log_message
  */
-static void php_runkit_sandbox_sapi_log_message(char *message)
+static void php_runkit_sandbox_sapi_log_message(char *message LOG_MESSAGE_TSRMLS_DC)
 {
+#ifndef ZEND_ENGINE_2_4
 	TSRMLS_FETCH();
+#endif
 
 	if (!RUNKIT_G(current_sandbox)) {
 		/* Not in a sandbox use SAPI's actual handler */
-		php_runkit_sandbox_original_sapi.log_message(message);
+		php_runkit_sandbox_original_sapi.log_message(message LOG_MESSAGE_TSRMLS_CC);
 		return;
 	}
 
@@ -1208,7 +1233,13 @@ static void php_runkit_sandbox_sapi_log_message(char *message)
 
 /* {{{ php_runkit_sandbox_sapi_get_request_time
  */
-static time_t php_runkit_sandbox_sapi_get_request_time(TSRMLS_D)
+#ifdef ZEND_ENGINE_2_4
+# define GET_REQUEST_TIME_TYPE double
+#else
+# define GET_REQUEST_TIME_TYPE time_t
+#endif
+
+static GET_REQUEST_TIME_TYPE php_runkit_sandbox_sapi_get_request_time(TSRMLS_D)
 {
 	if (!RUNKIT_G(current_sandbox)) {
 		/* Not in a sandbox use SAPI's actual handler */
@@ -1217,7 +1248,7 @@ static time_t php_runkit_sandbox_sapi_get_request_time(TSRMLS_D)
 
 	/* Parrot what main/SAPI.c does */
 	if (!SG(global_request_time)) {
-		SG(global_request_time) = time(0);
+		SG(global_request_time) = (GET_REQUEST_TIME_TYPE)time(0);
 	}
 	return SG(global_request_time);
 }
@@ -1282,7 +1313,12 @@ static void php_runkit_sandbox_sapi_treat_data(int arg, char *str, zval *destArr
 		return;
 	}
 
-	/* Do nothing */
+	if (PG(http_globals)[arg]) {
+		zval_ptr_dtor(&PG(http_globals)[arg]);
+	}
+	MAKE_STD_ZVAL(PG(http_globals)[arg]);
+	array_init(PG(http_globals)[arg]);
+
 	return;
 }
 /* }}} */

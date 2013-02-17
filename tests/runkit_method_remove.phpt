@@ -13,6 +13,10 @@ class runkit_class {
 	}
 }
 
+if (version_compare(phpversion(), "5.4.0") >= 0) {
+  error_reporting(E_ALL & ~E_STRICT);
+}
+
 runkit_class::runkit_method();
 runkit_method_remove('runkit_class','runkit_method');
 if (!method_exists('runkit_class','runkit_method')) {

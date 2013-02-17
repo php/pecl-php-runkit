@@ -10,7 +10,9 @@ display_errors=on
 class runkit_class {
 }
 
-runkit_method_add('runkit_class', 'runkit_method', '$a, $b = "bar"', 'echo "a is $a\nb is $b\n";'); 
+runkit_method_add('runkit_class', 'runkit_method',
+                  '$a, $b = "bar"', 'echo "a is $a\nb is $b\n";',
+                  RUNKIT_ACC_PUBLIC | RUNKIT_ACC_STATIC); 
 runkit_class::runkit_method('foo','bar');
 ?>
 --EXPECT--

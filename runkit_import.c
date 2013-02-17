@@ -201,47 +201,89 @@ import_const_skip:
 static int php_runkit_import_class_props(zend_class_entry *dce, zend_class_entry *ce, int override TSRMLS_DC)
 {
 	HashPosition pos;
-	char *key;
-	int key_len;
-	long idx;
+
+#ifdef ZEND_ENGINE_2_4
+	zend_property_info *pi;
+
+	for(zend_hash_internal_pointer_reset_ex(&ce->properties_info, &pos);
+	    zend_hash_get_current_data_ex(&ce->properties_info, (void**)&pi, &pos) == SUCCESS && pi;
+	    zend_hash_move_forward_ex(&ce->properties_info, &pos)) {
+		char *key;
+		int key_len;
+		long idx;
+		zend_property_info *dpi;
+
+		if (HASH_KEY_IS_STRING != zend_hash_get_current_key_ex(&ce->properties_info, &key, &key_len, &idx, 0, &pos)) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Property has invalid key name");
+			continue;
+		}
+
+		if (FAILURE == zend_hash_find(&dce->properties_info, key, key_len, (void**)&dpi)) {
+			zend_property_info newpi = *pi;
+			newpi.name = estrndup(newpi.name, newpi.name_length);
+			if (newpi.doc_comment) {
+				newpi.doc_comment = estrndup(newpi.doc_comment, newpi.doc_comment_len);
+			}
+			dce->default_properties_table = safe_erealloc(dce->default_properties_table, dce->default_properties_count + 1, sizeof(zval*), 0);
+			newpi.offset = dce->default_properties_count++;
+			MAKE_STD_ZVAL(dce->default_properties_table[newpi.offset]);
+
+			zend_hash_add(&dce->properties_info, key, key_len, &newpi, sizeof(zend_property_info), (void**)&dpi);
+		}
+		dpi->ce = dce;
+		zval_ptr_dtor(&dce->default_properties_table[dpi->offset]);
+		MAKE_STD_ZVAL(dce->default_properties_table[dpi->offset]);
+		ZVAL_ZVAL(dce->default_properties_table[dpi->offset], ce->default_properties_table[pi->offset], 1, 0);
+
+		if (pi->flags & (ZEND_ACC_PUBLIC|ZEND_ACC_PROTECTED)) {
+			zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_def_props, 5, dce, dce->default_properties_table[dpi->offset], key, key_len - 1, dpi);
+		}
+	}
+
+#else /* PHP <= 5.3 */
 	zval **p;
 
-	zend_hash_internal_pointer_reset_ex(&ce->default_properties, &pos);
-	while (zend_hash_get_current_data_ex(&ce->default_properties, (void**)&p, &pos) == SUCCESS && p && *p) {
+	/* Ignores properties_info because that can just be resolved on the fly in these versions */
+	for(zend_hash_internal_pointer_reset_ex(&ce->default_properties, &pos);
+	    zend_hash_get_current_data_ex(&ce->default_properties, (void**)&p, &pos) == SUCCESS && p && *p;
+	    zend_hash_move_forward_ex(&ce->default_properties, &pos)) {
+		char *key, *cname = NULL, *pname;
+		int key_len;
+		long idx;
 		long action = HASH_ADD;
 
-		if (zend_hash_get_current_key_ex(&ce->default_properties, &key, &key_len, &idx, 0, &pos) == HASH_KEY_IS_STRING) {
-			char *cname = NULL, *pname = key;
+		if (HASH_KEY_IS_STRING != zend_hash_get_current_key_ex(&ce->default_properties, &key, &key_len, &idx, 0, &pos)) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Property has invalid key name");
+			continue;
+		}
+		pname = key;
 
 #ifdef ZEND_ENGINE_2_2
-			zend_unmangle_property_name(key, key_len - 1, &cname, &pname);
+		zend_unmangle_property_name(key, key_len - 1, &cname, &pname);
 #elif defined(ZEND_ENGINE_2)
-			zend_unmangle_property_name(key, &cname, &pname);
+		zend_unmangle_property_name(key, &cname, &pname);
 #endif
-			if (zend_hash_exists(&dce->default_properties, key, key_len)) {
-				if (override) {
-					action = HASH_UPDATE;
-				} else {
-					php_error_docref(NULL TSRMLS_CC, E_NOTICE, "%s->%s already exists, not importing", dce->name, pname);
-					goto import_prop_skip;
-				}
+		if (zend_hash_exists(&dce->default_properties, key, key_len)) {
+			if (override) {
+				action = HASH_UPDATE;
+			} else {
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "%s->%s already exists, not importing", dce->name, pname);
+				continue;
 			}
-			ZVAL_ADDREF(*p);
-			if (zend_hash_add_or_update(&dce->default_properties, key, key_len, (void*)p, sizeof(zval*), NULL, action) == FAILURE) {
-				zval_ptr_dtor(p);
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to import %s->%s", dce->name, pname);
-			}
-
-			if (!cname || strcmp(cname, "*") == 0) {
-				/* PUBLIC || PROTECTED */
-				zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_def_props, 4, dce, p, key, key_len - 1);
-			}
-		} else {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Property has invalid key name");
 		}
-import_prop_skip:
-		zend_hash_move_forward_ex(&ce->default_properties, &pos);
+		ZVAL_ADDREF(*p);
+		if (zend_hash_add_or_update(&dce->default_properties, key, key_len, (void*)p, sizeof(zval*), NULL, action) == FAILURE) {
+			zval_ptr_dtor(p);
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to import %s->%s", dce->name, pname);
+			continue;
+		}
+
+		if (!cname || strcmp(cname, "*") == 0) {
+			/* PUBLIC || PROTECTED */
+			zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_def_props, 4, dce, p, key, key_len - 1);
+		}
 	}
+#endif /* ZEND_ENGINE_2_4 */
 
 	return SUCCESS;
 }
@@ -278,9 +320,9 @@ static int php_runkit_import_classes(HashTable *class_table, long flags TSRMLS_D
 			zend_class_entry *dce;
 
 			/* We can clobber the temp class's name, it'll be freed soon anyway */
-			php_strtolower(ce->name, ce->name_length);
+			php_strtolower((char*)ce->name, ce->name_length);
 
-			if (php_runkit_fetch_class(ce->name, ce->name_length, &dce TSRMLS_CC) == FAILURE) {
+			if (php_runkit_fetch_class((char*)ce->name, ce->name_length, &dce TSRMLS_CC) == FAILURE) {
 				/* Oddly non-existant target class or error retreiving it... Or it's an internal class... */
 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Cannot redeclare class %s", ce->name);
 				continue;

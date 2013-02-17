@@ -16,6 +16,11 @@ class runkit_one {
 class runkit_two {
 }
 
+if (version_compare(phpversion(), "5.4.0") >= 0) {
+  /* Ignore ZEND_ACC_ALLOW_STATIC strict notice */
+  error_reporting(E_ALL & ~E_STRICT);
+}
+
 runkit_one::runkit_method(1);
 runkit_method_copy('runkit_two','runkit_method','runkit_one');
 runkit_one::runkit_method(2);

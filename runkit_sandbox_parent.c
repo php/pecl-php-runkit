@@ -72,12 +72,12 @@ typedef struct _php_runkit_sandbox_parent_object {
 	} \
 }
 
-#ifdef ZEND_ENGINE_2_3
 /**
  * Variant of zend_rebuild_symbol_table() which can operate on
  * predecessing scopes
  */
 static void php_runkit_rebuild_symbol_table(zend_execute_data *ex TSRMLS_DC) {
+#ifdef ZEND_ENGINE_2_3
 	int i;
 
 	if (ex->symbol_table) return;
@@ -88,26 +88,26 @@ static void php_runkit_rebuild_symbol_table(zend_execute_data *ex TSRMLS_DC) {
 	if (!ex->op_array) return;
 
 	if (ex->op_array->this_var != -1 &&
-		!ex->CVs[ex->op_array->this_var] &&
+		!*EX_CV_NUM(ex, ex->op_array->this_var) &&
 		ex->current_this) {
-		ex->CVs[ex->op_array->this_var] = (zval**)ex->CVs + ex->op_array->last_var + ex->op_array->this_var;
-		*ex->CVs[ex->op_array->this_var] = ex->current_this;
+		*EX_CV_NUM(ex, ex->op_array->this_var) = (zval**)EX_CV_NUM(ex, ex->op_array->last_var + ex->op_array->this_var);
+		**EX_CV_NUM(ex, ex->op_array->this_var) = ex->current_this;
 	}
 
 	/* Populate CVs into symbol table */
 	for (i = 0; i < ex->op_array->last_var; i++) {
-		if (ex->CVs[i]) {
+		if (*EX_CV_NUM(ex, i)) {
 			zend_hash_quick_update(ex->symbol_table,
 			                       ex->op_array->vars[i].name,
 			                       ex->op_array->vars[i].name_len + 1,
 			                       ex->op_array->vars[i].hash_value,
-			                       (void**)ex->CVs[i],
+			                       (void**)*EX_CV_NUM(ex, i),
 			                       sizeof(zval*),
-			                       (void**)&ex->CVs[i]);
+			                       (void**)EX_CV_NUM(ex, i));
 		}
 	}
+#endif /* ZEND_ENGINE_2_3 */
 }
-#endif
 
 static HashTable *php_runkit_sandbox_parent_resolve_symbol_table(php_runkit_sandbox_parent_object *objval TSRMLS_DC)
 {
@@ -153,9 +153,7 @@ static HashTable *php_runkit_sandbox_parent_resolve_symbol_table(php_runkit_sand
 		return ht;
 	}
 	if (objval->self->parent_scope == 1) {
-#ifdef ZEND_ENGINE_2_3
 		zend_rebuild_symbol_table(TSRMLS_C);
-#endif
 		return EG(active_symbol_table);
 	}
 
@@ -166,9 +164,7 @@ static HashTable *php_runkit_sandbox_parent_resolve_symbol_table(php_runkit_sand
 		}
 		ex = ex->prev_execute_data;
 	}
-#ifdef ZEND_ENGINE_2_3
 	php_runkit_rebuild_symbol_table(ex TSRMLS_CC);
-#endif
 	return ex->symbol_table ? ex->symbol_table : &EG(symbol_table);
 }
 

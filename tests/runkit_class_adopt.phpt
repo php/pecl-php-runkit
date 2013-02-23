@@ -33,7 +33,9 @@ var_dump($t);
 $t = get_class_methods('ChildClass');
 sort($t);
 var_dump($t);
-?>
+
+var_dump(get_parent_class('ChildClass'));
+var_dump(get_parent_class('ParentClass'));
 --EXPECT--
 array(1) {
   [0]=>
@@ -59,3 +61,5 @@ array(3) {
   [2]=>
   string(3) "two"
 }
+string(11) "ParentClass"
+string(11) "Grandparent"

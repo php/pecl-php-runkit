@@ -124,7 +124,10 @@ PHP_FUNCTION(runkit_class_adopt)
 		RETURN_FALSE;
 	}
 
+	ce->parent = parent;
 	zend_hash_apply_with_argument(&parent->function_table, (apply_func_arg_t)php_runkit_inherit_methods, ce TSRMLS_CC);
+
+	/* TODO: Inherit properties */
 
 	RETURN_TRUE;
 }

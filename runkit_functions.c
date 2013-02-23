@@ -269,6 +269,48 @@ int php_runkit_destroy_misplaced_functions(zend_hash_key *hash_key TSRMLS_DC)
 }
 /* }}} */
 
+static Bucket *php_runkit_hash_get_bucket(HashTable *ht, zend_hash_key *hash_key) {
+	Bucket *p = ht->arBuckets[hash_key->h & ht->nTableMask];
+	while (p) {
+		if ((p->arKey == hash_key->arKey) ||
+		    ((p->h == hash_key->h) && (p->nKeyLength == hash_key->nKeyLength) &&
+		                              !memcmp(p->arKey, hash_key->arKey, hash_key->nKeyLength))) {
+			return p;
+		}
+		p = p->pNext;
+	}
+	return NULL;
+}
+
+static void php_runkit_hash_move_to_front(HashTable *ht, Bucket *p) {
+	if (!p) return;
+
+	/* Unlink from global DLList */
+	if (p->pListNext) {
+		p->pListNext->pListLast = p->pListLast;
+	}
+	if (p->pListLast) {
+		p->pListLast->pListNext = p->pListNext;
+	}
+	if (ht->pListTail == p) {
+		ht->pListTail = p->pListLast;
+	}
+	if (ht->pListHead == p) {
+		ht->pListHead = p->pListNext;
+	}
+
+	/* Relink at the front */
+	p->pListLast = NULL;
+	p->pListNext = ht->pListHead;
+	if (p->pListNext) {
+		p->pListNext->pListLast = p;
+	}
+	ht->pListHead = p;
+	if (!ht->pListTail) {
+		ht->pListTail = p;
+	}
+}
+
 /* {{{ php_runkit_restore_internal_functions
 	Cleanup after modifications to internal functions */
 int php_runkit_restore_internal_functions(zend_internal_function *fe ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key)
@@ -283,6 +325,12 @@ int php_runkit_restore_internal_functions(zend_internal_function *fe ZEND_HASH_A
 	}
 
 	zend_hash_update(EG(function_table), hash_key->arKey, hash_key->nKeyLength, (void*)fe, sizeof(zend_function), NULL);
+
+	/* It's possible for restored internal functions to now be blocking a ZEND_USER_FUNCTION
+	 * which will screw up post-request cleanup.
+	 * Avoid this by restoring internal functions to the front of the list where they won't be in the way
+	 */
+	php_runkit_hash_move_to_front(EG(function_table), php_runkit_hash_get_bucket(EG(function_table), hash_key));
 
 	return ZEND_HASH_APPLY_REMOVE;
 }

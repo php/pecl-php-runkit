@@ -71,11 +71,15 @@ PHP_FUNCTION(runkit_class_emancipate)
 	Inherit methods from a new ancestor */
 static int php_runkit_inherit_methods(zend_function *fe, zend_class_entry *ce TSRMLS_DC)
 {
-	char *function_name = (char*)fe->common.function_name;
-	int function_name_len = strlen(function_name);
-	zend_class_entry *ancestor_class = php_runkit_locate_scope(ce, fe, function_name, function_name_len);
+	int function_name_len = strlen(fe->common.function_name);
+	char *function_name = estrndup(fe->common.function_name, function_name_len);
+	zend_class_entry *ancestor_class;
+
+	php_strtolower(function_name, function_name_len);
+	ancestor_class = php_runkit_locate_scope(ce, fe, function_name, function_name_len);
 
 	if (zend_hash_exists(&ce->function_table, function_name, function_name_len + 1)) {
+		efree(function_name);
 		return ZEND_HASH_APPLY_KEEP;
 	}
 
@@ -83,12 +87,10 @@ static int php_runkit_inherit_methods(zend_function *fe, zend_class_entry *ce TS
 
 	function_add_ref(fe);
 
-	/* method name keys must be lower case */
-	function_name = estrndup(function_name, function_name_len);
-	php_strtolower(function_name, function_name_len);
 	if (zend_hash_add_or_update(&ce->function_table, function_name, function_name_len + 1, fe, sizeof(zend_function), NULL, HASH_ADD) == FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Error inheriting parent method: %s()", fe->common.function_name);
 		efree(function_name);
+		destroy_op_array((zend_op_array*)fe TSRMLS_CC);
 		return ZEND_HASH_APPLY_KEEP;
 	}
 	efree(function_name);

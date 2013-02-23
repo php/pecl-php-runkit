@@ -183,6 +183,8 @@ int php_runkit_destroy_misplaced_functions(zend_hash_key *hash_key TSRMLS_DC);
 int php_runkit_restore_internal_functions(zend_internal_function *fe ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
 
 /* runkit_methods.c */
+void php_runkit_add_magic_method(zend_class_entry *ce, const char *method, zend_function *fe);
+void php_runkit_del_magic_method(zend_class_entry *ce, zend_function *fe);
 int php_runkit_fetch_class(char *classname, int classname_len, zend_class_entry **pce TSRMLS_DC);
 int php_runkit_clean_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
 int php_runkit_update_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
@@ -312,29 +314,6 @@ struct _php_runkit_sandbox_object {
 		(classname_len) = 0; \
 	} \
 }
-
-#ifdef ZEND_ENGINE_2
-#define PHP_RUNKIT_ADD_MAGIC_METHOD(ce, method, fe) { \
-	if ((strcmp((method), (ce)->name) == 0) || \
-		(strcmp((method), "__construct") == 0)) {	(ce)->constructor	= (fe); (fe)->common.fn_flags = ZEND_ACC_CTOR; } \
-	else if (strcmp((method), "__destruct") == 0) {	(ce)->destructor	= (fe); (fe)->common.fn_flags = ZEND_ACC_DTOR; } \
-	else if (strcmp((method), "__clone") == 0)  {	(ce)->clone			= (fe); (fe)->common.fn_flags = ZEND_ACC_CLONE; } \
-	else if (strcmp((method), "__get") == 0)		(ce)->__get			= (fe); \
-	else if (strcmp((method), "__set") == 0)		(ce)->__set			= (fe); \
-	else if (strcmp((method), "__call") == 0)		(ce)->__call		= (fe); \
-}
-#define PHP_RUNKIT_DEL_MAGIC_METHOD(ce, fe) { \
-	if ((ce)->constructor == (fe))			(ce)->constructor	= NULL; \
-	else if ((ce)->destructor == (fe))		(ce)->destructor	= NULL; \
-	else if ((ce)->clone == (fe))			(ce)->clone			= NULL; \
-	else if ((ce)->__get == (fe))			(ce)->__get			= NULL; \
-	else if ((ce)->__set == (fe))			(ce)->__set			= NULL; \
-	else if ((ce)->__call == (fe))			(ce)->__call		= NULL; \
-}
-#else
-#define PHP_RUNKIT_ADD_MAGIC_METHOD(ce, method, fe)
-#define PHP_RUNKIT_DEL_MAGIC_METHOD(ce, fe)
-#endif
 #endif /* PHP_RUNKIT_MANIPULATION */
 
 #endif	/* PHP_RUNKIT_H */

@@ -34,7 +34,7 @@ static int php_runkit_remove_inherited_methods(zend_function *fe, zend_class_ent
 
 	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, function_name, function_name_len);
 
-	PHP_RUNKIT_DEL_MAGIC_METHOD(ce, fe);
+	php_runkit_del_magic_method(ce, fe);
 
 	return ZEND_HASH_APPLY_REMOVE;
 }
@@ -93,7 +93,7 @@ static int php_runkit_inherit_methods(zend_function *fe, zend_class_entry *ce TS
 	}
 	efree(function_name);
 
-	PHP_RUNKIT_ADD_MAGIC_METHOD(ce, fe->common.function_name, fe);
+	php_runkit_add_magic_method(ce, fe->common.function_name, fe);
 
 	return ZEND_HASH_APPLY_KEEP;
 }

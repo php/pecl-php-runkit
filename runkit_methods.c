@@ -22,6 +22,57 @@
 
 #ifdef PHP_RUNKIT_MANIPULATION
 
+#define RUNKIT_MAGIC_SETS(mname, fname, acc)	if (!strcasecmp(method, mname)) { ce->fname = fe; fe->common.fn_flags |= acc; return; }
+#define RUNKIT_MAGIC_SET(mname)			RUNKIT_MAGIC_SETS(#mname, mname, 0)
+
+void php_runkit_add_magic_method(zend_class_entry *ce, const char *method, zend_function *fe) {
+#ifdef ZEND_ENGINE_2
+	RUNKIT_MAGIC_SETS("__construct", constructor, ZEND_ACC_CTOR)
+	RUNKIT_MAGIC_SETS(ce->name,      constructor, ZEND_ACC_CTOR)
+	RUNKIT_MAGIC_SETS("__destruct",  destructor,  ZEND_ACC_DTOR)
+	RUNKIT_MAGIC_SETS("__clone",     clone,       ZEND_ACC_CLONE)
+	RUNKIT_MAGIC_SET(__get)
+	RUNKIT_MAGIC_SET(__set)
+	RUNKIT_MAGIC_SET(__isset)
+	RUNKIT_MAGIC_SET(__unset)
+	RUNKIT_MAGIC_SET(__call)
+#ifdef ZEND_ENGINE_2_3
+	RUNKIT_MAGIC_SET(__callstatic)
+#endif
+#ifdef ZEND_ENGINE_2_2
+	RUNKIT_MAGIC_SET(__tostring)
+#endif
+	RUNKIT_MAGIC_SETS("__sleep",     serialize_func,   0)
+	RUNKIT_MAGIC_SETS("__wakeup",    unserialize_func, 0)
+#endif /* ZEND_ENGINE_2 */
+}
+#undef RUNKIT_MAGIC_SET
+#undef RUNKIT_MAGIC_SETS
+
+#define RUNKIT_MAGIC_DEL(fname)                 if (ce->fname = fe) { ce->fname = NULL; }
+
+void php_runkit_del_magic_method(zend_class_entry *ce, zend_function *fe) {
+#ifdef ZEND_ENGINE_2
+	RUNKIT_MAGIC_DEL(constructor)
+	RUNKIT_MAGIC_DEL(destructor)
+	RUNKIT_MAGIC_DEL(clone)
+	RUNKIT_MAGIC_DEL(__get)
+	RUNKIT_MAGIC_DEL(__set)
+	RUNKIT_MAGIC_DEL(__isset)
+	RUNKIT_MAGIC_DEL(__unset)
+	RUNKIT_MAGIC_DEL(__call)
+#ifdef ZEND_ENGINE_2_3
+	RUNKIT_MAGIC_DEL(__callstatic)
+#endif
+#ifdef ZEND_ENGINE_2_2
+	RUNKIT_MAGIC_DEL(__tostring)
+#endif
+	RUNKIT_MAGIC_DEL(serialize_func)
+	RUNKIT_MAGIC_DEL(unserialize_func)
+#endif /* ZEND_ENGINE_2 */
+}
+#undef RUNKIT_MAGIC_DEL
+
 #ifndef ZEND_ENGINE_2
 /* {{{ _php_runkit_locate_scope
     ZendEngine 1 hack to determine a function's scope */
@@ -220,7 +271,7 @@ int php_runkit_update_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS
 		return ZEND_HASH_APPLY_KEEP;
 	}
 
-	PHP_RUNKIT_ADD_MAGIC_METHOD(ce, fname, fe);
+	php_runkit_add_magic_method(ce, fname, fe);
 
 	return ZEND_HASH_APPLY_KEEP;
 }
@@ -267,7 +318,7 @@ int php_runkit_clean_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_
 
 	zend_hash_del(&ce->function_table, fname, fname_len + 1);
 
-	PHP_RUNKIT_DEL_MAGIC_METHOD(ce, cfe);
+	php_runkit_del_magic_method(ce, cfe);
 
 	return ZEND_HASH_APPLY_KEEP;
 }
@@ -368,7 +419,7 @@ methodname_len);
 		RETURN_FALSE;
 	}
 
-	PHP_RUNKIT_ADD_MAGIC_METHOD(ce, methodname, fe);
+	php_runkit_add_magic_method(ce, methodname, fe);
 	RETURN_TRUE;
 }
 /* }}} */
@@ -406,7 +457,7 @@ static int php_runkit_method_copy(char *dclass, int dclass_len, char *dfunc, int
 		return FAILURE;
 	}
 
-	PHP_RUNKIT_ADD_MAGIC_METHOD(dce, dfunc, dfeInHashTable);
+	php_runkit_add_magic_method(dce, dfunc, dfeInHashTable);
 
 	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, dce, dce, &dfe, dfunc, dfunc_len);
 
@@ -467,7 +518,7 @@ PHP_FUNCTION(runkit_method_remove)
 		RETURN_FALSE;
 	}
 
-	PHP_RUNKIT_DEL_MAGIC_METHOD(ce, fe);
+	php_runkit_del_magic_method(ce, fe);
 	RETURN_TRUE;
 }
 /* }}} */
@@ -524,14 +575,14 @@ methodname_len);
 		RETURN_FALSE;
 	}
 
-	PHP_RUNKIT_DEL_MAGIC_METHOD(ce, fe);
+	php_runkit_del_magic_method(ce, fe);
 
 	if (php_runkit_fetch_class_method(classname, classname_len, newname, newname_len, &ce, &fe TSRMLS_CC) == FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to locate newly renamed method");
 		RETURN_FALSE;
 	}
 
-	PHP_RUNKIT_ADD_MAGIC_METHOD(ce, newname, fe);
+	php_runkit_add_magic_method(ce, newname, fe);
 	RETURN_TRUE;
 }
 /* }}} */

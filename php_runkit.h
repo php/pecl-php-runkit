@@ -69,6 +69,12 @@
 # define ZEND_HASH_APPLY_ARGS_TSRMLS_DC
 #endif
 
+#ifdef ZEND_ENGINE_2
+# define ZE2_TSRMLS_CC TSRMLS_CC
+#else
+# define ZE2_TSRMLS_CC
+#endif
+
 #ifdef ZEND_ENGINE_2_4
 # define PHP_RUNKIT_OP_TYPE(zop) (zop##_type)
 # define PHP_RUNKIT_OP_U(zop) (zop)
@@ -168,14 +174,41 @@ extern ZEND_DECLARE_MODULE_GLOBALS(runkit);
 #endif
 
 #ifdef PHP_RUNKIT_MANIPULATION
-#if defined(ZEND_ENGINE_2) && !defined(zend_hash_add_or_update)
+
+#ifdef ZEND_ENGINE_2
+
+#ifndef zend_hash_add_or_update
 /* Why doesn't ZE2 define this? */
 #define zend_hash_add_or_update(ht, arKey, nKeyLength, pData, pDataSize, pDest, flag) \
-        _zend_hash_add_or_update((ht), (arKey), (nKeyLength), (pData), (pDataSize), (pDest), (flag) ZEND_FILE_LINE_CC)
-#endif
+	_zend_hash_add_or_update((ht), (arKey), (nKeyLength), (pData), (pDataSize), (pDest), (flag) ZEND_FILE_LINE_CC)
+#endif /* zend_hash_add_or_update */
+
+/* Or this? */
+#ifndef zend_hash_quick_add_or_update
+#define zend_hash_quick_add_or_update(ht, arKey, nKeyLength, arKeyHash, pData, pDataSize, pDest, flag) \
+	_zend_hash_quick_add_or_update((ht), (arKey), (nKeyLength), (arKeyHash), (pData), (pDataSize), (pDest), (flag) ZEND_FILE_LINE_CC)
+#endif /* zend_hash_quick_add_or_update */
+
+#else /* ZE1 */
+#define zend_hash_quick_add_or_update(ht, arKey, nKeyLength, arKeyHash, pData, pDataSize, pDest, flag) \
+	zend_hash_add_or_update((ht), (arKey), (nKeyLength), (pData), (pDataSize), (pDest), (flag))
+#define zend_hash_quick_del(ht, arKey, nKeyLength, arKeyHash) \
+	zend_hash_del(ht, arKey, nKeyLength)
+#define zend_hash_quick_add(ht, arKey, nKeyLength, arKeyHash, pData, nDataSize, pDest) \
+	zend_hash_add(ht, arKey, nKeyLength, pData, nDataSize, pDest)
+#define zend_hash_quick_update(ht, arKey, nKeyLength, arKeyHash, pData, nDataSize, pDest) \
+	zend_hash_update(ht, arKey, nKeyLength, pData, nDataSize, pDest)
+#define zend_hash_quick_exists(ht, arKey, nKeyLength, arKeyHash) \
+	zend_hash_exists(ht, arKey, nKeyLength)
+#define zend_hash_quick_find(ht, arKey, nKeyLength, arKeyHash, pDest) \
+	zend_hash_find(ht, arKey, nKeyLength, pDest)
+#endif /* ZE2 hash API */
 
 /* runkit_functions.c */
 #define RUNKIT_TEMP_FUNCNAME  "__runkit_temporary_function__"
+extern ulong RUNKIT_TEMP_FUNCNAME_HASH;
+void php_runkit_function_dtor(zend_function *fe TSRMLS_DC);
+int php_runkit_function_delete(HashTable *ht, const char *key, int key_len, ulong key_hash TSRMLS_DC);
 int php_runkit_check_call_stack(zend_op_array *op_array TSRMLS_DC);
 void php_runkit_function_copy_ctor(zend_function *fe, char *newname);
 int php_runkit_generate_lambda_method(char *arguments, int arguments_len, char *phpcode, int phpcode_len, zend_function **pfe TSRMLS_DC);
@@ -198,7 +231,6 @@ int php_runkit_fetch_interface(char *classname, int classname_len, zend_class_en
 #else /* ZEND_ENGINE_1 */
 zend_class_entry *_php_runkit_locate_scope(zend_class_entry *ce, zend_function *fe, char *methodname, int methodname_len);
 #define php_runkit_locate_scope(ce, fe, 		methodname, methodname_len)   _php_runkit_locate_scope((ce), (fe), (methodname), (methodname_len))
-#define zend_function_dtor						destroy_zend_function
 
 #endif /* Version Agnosticism */
 

@@ -15,7 +15,7 @@ eval("class C extends A { public function x() {} }");
 Reflection::export(new ReflectionMethod('C', 'x'));
 
 --EXPECTF--
-Method [ <user> public method x ] {
+Method [ <user, prototype A> public method x ] {
   @@ %s/tests/bug56662.php(3) : runkit runtime-created function 1 - 1
 }
 

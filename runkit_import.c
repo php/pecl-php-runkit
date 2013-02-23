@@ -26,58 +26,46 @@
 static int php_runkit_import_functions(HashTable *function_table, long flags TSRMLS_DC)
 {
 	HashPosition pos;
-	int i, func_count = zend_hash_num_elements(function_table);
+	zend_function *fe;
 
-	zend_hash_internal_pointer_reset_ex(function_table, &pos);
-	for(i = 0; i < func_count; i++) {
-		zend_function *fe = NULL;
+	for(zend_hash_internal_pointer_reset_ex(function_table, &pos);
+	    zend_hash_get_current_data_ex(function_table, (void**)&fe, &pos) == SUCCESS;
+            zend_hash_move_forward_ex(function_table, &pos)) {
 		char *key;
 		int key_len, type;
 		long idx;
-		zend_bool add_function = 1;
+		ulong key_hash;
+		zend_function fecopy;
 
-		zend_hash_get_current_data_ex(function_table, (void**)&fe, &pos);
+		if ((type = zend_hash_get_current_key_ex(function_table, &key, &key_len, &idx, 0, &pos)) != HASH_KEY_IS_STRING) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Ignoring numerically indexed function entry %ld", idx);
+			continue;
+		}
+		key_hash = zend_get_hash_value(key, key_len);
 
-		if (((type = zend_hash_get_current_key_ex(EG(function_table), &key, &key_len, &idx, 0, &pos)) != HASH_KEY_NON_EXISTANT) && 
-			fe && fe->type == ZEND_USER_FUNCTION) {
-		
+		if (!fe || fe->type != ZEND_USER_FUNCTION) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Ignoring non-user function during import");
+			continue;
+		}
+
+		if (zend_hash_quick_exists(EG(function_table), key, key_len, key_hash)) {
 			if (flags & PHP_RUNKIT_IMPORT_OVERRIDE) {
-				if (type == HASH_KEY_IS_STRING) {
-					if (zend_hash_del(EG(function_table), key, key_len) == FAILURE) {
-						php_error_docref(NULL TSRMLS_CC, E_WARNING, "Inconsistency cleaning up import environment");
-						return FAILURE;
-					}
-				} else {
-					if (zend_hash_index_del(EG(function_table), idx) == FAILURE) {
-						php_error_docref(NULL TSRMLS_CC, E_WARNING, "Inconsistency cleaning up import environment");
-						return FAILURE;
-					}
-				}
+				php_runkit_function_delete(EG(function_table), key, key_len, key_hash TSRMLS_CC);
 			} else {
-				add_function = 0;
+				/* No override == skip */
+				continue;
 			}
 		}
 
-		if (add_function) {
-			char *lcase = estrdup(fe->common.function_name);
-			int lcase_len = strlen(lcase);
-
-			function_add_ref(fe);
-
-			php_strtolower(lcase, lcase_len);
-			if (zend_hash_add(EG(function_table), lcase, lcase_len + 1, fe, sizeof(zend_function), NULL) == FAILURE) {
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failure importing %s()", fe->common.function_name);
-#ifdef ZEND_ENGINE_2
-				destroy_zend_function(fe TSRMLS_CC);
-#else
-				destroy_end_function(fe);
-#endif
-				efree(lcase);
-				return FAILURE;
-			}
-			efree(lcase);
+		/* We shouldn't have to copy this, but... see php_runkit_function_delete() */
+		fecopy = *fe;
+		php_runkit_function_copy_ctor(&fecopy, NULL);
+		if (zend_hash_quick_add(EG(function_table), key, key_len, key_hash, &fecopy, sizeof(zend_function), (void**)&fe) == FAILURE) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failure importing %s()", fecopy.common.function_name);
+			php_runkit_function_dtor(&fecopy TSRMLS_CC);
+			return FAILURE;
 		}
-		zend_hash_move_forward_ex(function_table, &pos);
+		fe->common.prototype = fe;
 	}
 
 	return SUCCESS;
@@ -90,65 +78,57 @@ static int php_runkit_import_class_methods(zend_class_entry *dce, zend_class_ent
 {
 	HashPosition pos;
 	zend_function *fe;
-	char *fn;
-	int fn_maxlen;
 
-	/* Generic strtolower buffer for function names */
-	fn_maxlen = 64;
-	fn = emalloc(fn_maxlen);
+	for(zend_hash_internal_pointer_reset_ex(&ce->function_table, &pos);
+	    zend_hash_get_current_data_ex(&ce->function_table, (void**)&fe, &pos) == SUCCESS;
+	    zend_hash_move_forward_ex(&ce->function_table, &pos)) {
+		char *key;
+		int key_len;
+		long idx;
+		ulong key_hash;
+		zend_function *dfe, fecopy;
+		zend_class_entry *fe_scope = php_runkit_locate_scope(ce, fe, fe->common.function_name, strlen(fe->common.function_name));
 
-	zend_hash_internal_pointer_reset_ex(&ce->function_table, &pos);
-	while (zend_hash_get_current_data_ex(&ce->function_table, (void**)&fe, &pos) == SUCCESS) {
-		zend_function *dfe;
-		int fn_len = strlen(fe->common.function_name);
-		zend_class_entry *fe_scope = php_runkit_locate_scope(ce, fe, fe->common.function_name, fn_len);
-				
+		if (zend_hash_get_current_key_ex(&ce->function_table, &key, &key_len, &idx, 0, &pos) != HASH_KEY_IS_STRING) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Ignoring method with non-string name %ld", idx);
+			continue;
+		}
+		key_hash = zend_get_hash_value(key, key_len);
+
 		if (fe_scope != ce) {
 			/* This is an inhereted function, let's skip it */
-			zend_hash_move_forward_ex(&ce->function_table, &pos);
 			continue;
 		}
 
-		if (fn_len > fn_maxlen - 1) {
-			fn_maxlen = fn_len + 33;
-			fn = erealloc(fn, fn_maxlen);
-		}
-		memcpy(fn, fe->common.function_name, fn_len + 1);
-		php_strtolower(fn, fn_len);
-
-		if (zend_hash_find(&dce->function_table, fn, fn_len + 1, (void**)&dfe) == SUCCESS) {
-			zend_class_entry *scope = php_runkit_locate_scope(dce, dfe, fn, fn_len);
+		if (zend_hash_quick_find(&dce->function_table, key, key_len, key_hash, (void**)&dfe) == SUCCESS) {
+			zend_class_entry *scope = php_runkit_locate_scope(dce, dfe, key, key_len - 1);
 
 			if (php_runkit_check_call_stack(&dfe->op_array TSRMLS_CC) == FAILURE) {
 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Cannot override active method %s::%s(). Skipping.", dce->name, fe->common.function_name);
-				zend_hash_move_forward_ex(&ce->function_table, &pos);
 				continue;
 			}
 
-			zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, scope, dce, fn, fn_len);
-			if (zend_hash_del(&dce->function_table, fn, fn_len + 1) == FAILURE) {
+			zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, scope, dce, key, key_len - 1);
+			if (php_runkit_function_delete(&dce->function_table, key, key_len, key_hash TSRMLS_CC) == FAILURE) {
 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Error removing old method in destination class %s::%s", dce->name, fe->common.function_name);
-				zend_hash_move_forward_ex(&ce->function_table, &pos);
 				continue;
 			}
 		}
 
-		function_add_ref(fe);
+		fecopy = *fe;
+		php_runkit_function_copy_ctor(&fecopy, NULL);
 #ifdef ZEND_ENGINE_2
 		fe->common.scope = dce;
 #endif
-		zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, dce, dce, fe, fn, fn_len);
+		zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, dce, dce, &fecopy, key, key_len - 1);
 
-		if (zend_hash_add(&dce->function_table, fn, fn_len + 1, fe, sizeof(zend_function), NULL) == FAILURE) {
+		if (zend_hash_quick_add(&dce->function_table, key, key_len, key_hash, &fecopy, sizeof(zend_function), (void**)&fe) == FAILURE) {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failure importing %s::%s()", ce->name, fe->common.function_name);
-			zend_hash_move_forward_ex(&ce->function_table, &pos);
+			php_runkit_function_dtor(&fecopy TSRMLS_CC);
 			continue;
 		}
-
-		zend_hash_move_forward_ex(&ce->function_table, &pos);
+		fe->common.prototype = fe;
 	}
-
-	efree(fn);
 
 	return SUCCESS;
 }
@@ -467,11 +447,7 @@ PHP_FUNCTION(runkit_import)
 	}
 
 	/* We never really needed the main loop opcodes to begin with */
-#ifdef ZEND_ENGINE_2
-	destroy_op_array(new_op_array TSRMLS_CC);
-#else
-	destroy_op_array(new_op_array);
-#endif
+	php_runkit_function_dtor((zend_function*)new_op_array TSRMLS_CC);
 	efree(new_op_array);
 
 	if (flags & PHP_RUNKIT_IMPORT_FUNCTIONS) {

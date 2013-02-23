@@ -195,6 +195,8 @@ static void _php_runkit_feature_constant(const char *name, size_t name_len, zend
  */
 PHP_MINIT_FUNCTION(runkit)
 {
+	RUNKIT_TEMP_FUNCNAME_HASH = zend_get_hash_value(RUNKIT_TEMP_FUNCNAME, sizeof(RUNKIT_TEMP_FUNCNAME));
+
 #ifdef ZTS
 	ts_allocate_id(&runkit_globals_id, sizeof(zend_runkit_globals), (ts_allocate_ctor)php_runkit_globals_ctor, NULL);
 #else

@@ -59,10 +59,10 @@ static int php_runkit_import_functions(HashTable *function_table, long flags TSR
 		}
 
 		if (add_function) {
-			function_add_ref(fe);
-
 			char *lcase = estrdup(fe->common.function_name);
 			int lcase_len = strlen(lcase);
+
+			function_add_ref(fe);
 
 			php_strtolower(lcase, lcase_len);
 			if (zend_hash_add(EG(function_table), lcase, lcase_len + 1, fe, sizeof(zend_function), NULL) == FAILURE) {

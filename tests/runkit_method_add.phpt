@@ -23,6 +23,12 @@ runkit_method_add('runkit_class', 'runkit_method',
                   RUNKIT_ACC_PUBLIC);
 $r->runkit_method(123, 456);
 
+// Mixed case method
+runkit_method_add('runkit_class', 'Test',
+                  '', 'echo "This is a test.\n";',
+                  RUNKIT_ACC_PUBLIC);
+$r->Test();
+
 // Magic method
 runkit_method_add('runkit_class', '__toString',
                   '', 'return "strval";',
@@ -50,6 +56,7 @@ if (version_compare(phpversion(), "5.3.0") < 0) {
 a is foo
 b is bar
 x + y = 579
+This is a test.
 strval
 You asked for blarg
 Called sFoo with 2 args

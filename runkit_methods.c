@@ -346,6 +346,8 @@ static void php_runkit_method_add_or_update(INTERNAL_FUNCTION_PARAMETERS, int ad
 															&flags) == FAILURE) {
 		RETURN_FALSE;
 	}
+	php_strtolower(classname, classname_len);
+	php_strtolower(methodname, methodname_len);
 
 #ifndef ZEND_ENGINE_2
 	if ((argc > 4) && flags) {

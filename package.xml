@@ -65,6 +65,7 @@ This release also:
     <file name="runkit_function_remove.phpt" role="test" />
     <file name="runkit_function_rename.phpt" role="test" />
     <file name="runkit_import_functions.phpt" role="test" />
+    <file name="runkit_import_methods.phpt" role="test" />
     <file name="runkit_lint.phpt" role="test" />
     <file name="runkit_method_add.phpt" role="test" />
     <file name="runkit_method_copy.phpt" role="test" />

@@ -118,7 +118,7 @@ static int php_runkit_import_class_methods(zend_class_entry *dce, zend_class_ent
 		fecopy = *fe;
 		php_runkit_function_copy_ctor(&fecopy, NULL);
 #ifdef ZEND_ENGINE_2
-		fe->common.scope = dce;
+		fecopy.common.scope = dce;
 #endif
 		zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, dce, dce, &fecopy, key, key_len - 1);
 

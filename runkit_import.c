@@ -101,6 +101,10 @@ static int php_runkit_import_class_methods(zend_class_entry *dce, zend_class_ent
 		}
 
 		if (zend_hash_quick_find(&dce->function_table, key, key_len, key_hash, (void**)&dfe) == SUCCESS) {
+			if (!override) {
+				continue;
+			}
+
 			zend_class_entry *scope = php_runkit_locate_scope(dce, dfe, key, key_len - 1);
 
 			if (php_runkit_check_call_stack(&dfe->op_array TSRMLS_CC) == FAILURE) {

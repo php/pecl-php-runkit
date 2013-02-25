@@ -559,8 +559,7 @@ PHP_FUNCTION(runkit_method_rename)
 	}
 
 	ancestor_class = php_runkit_locate_scope(ce, fe, methodname, methodname_len);
-	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, methodname, 
-methodname_len);
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, methodname, methodname_len);
 
 	func = *fe;
 	php_runkit_function_copy_ctor(&func, estrndup(newname, newname_len));
@@ -581,6 +580,8 @@ methodname_len);
 	fe->common.prototype = fe;
 
 	php_runkit_add_magic_method(ce, newname, fe);
+
+	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, ce, ce, fe, newname, newname_len);
 	RETURN_TRUE;
 }
 /* }}} */

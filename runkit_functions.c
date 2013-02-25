@@ -40,7 +40,9 @@ void php_runkit_function_dtor(zend_function *fe TSRMLS_DC) {
 int php_runkit_function_delete(HashTable *ht, const char *key, int key_len, ulong key_hash TSRMLS_DC) {
 	zend_op_array *fe;
 	HashTable *sv;
+#ifdef ZEND_ENGINE_2_4
 	void **rtc;
+#endif
 
 	if (key_hash == 0) {
 		key_hash = zend_get_hash_value(key, key_len);
@@ -58,14 +60,18 @@ int php_runkit_function_delete(HashTable *ht, const char *key, int key_len, ulon
 	}
 
 	sv = fe->static_variables;
-	rtc = fe->run_time_cache;
 	fe->static_variables = NULL;
+#ifdef ZEND_ENGINE_2_4
+	rtc = fe->run_time_cache;
 	fe->run_time_cache = NULL;
+#endif
 	if (FAILURE == zend_hash_quick_del(ht, key, key_len, key_hash)) {
 		return FAILURE;
 	}
 	fe->static_variables = sv;
+#ifdef ZEND_ENGINE_2_4
 	fe->run_time_cache = rtc;
+#endif
 	return SUCCESS;
 }
 

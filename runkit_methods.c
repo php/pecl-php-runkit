@@ -49,7 +49,7 @@ void php_runkit_add_magic_method(zend_class_entry *ce, const char *method, zend_
 #undef RUNKIT_MAGIC_SET
 #undef RUNKIT_MAGIC_SETS
 
-#define RUNKIT_MAGIC_DEL(fname)                 if (ce->fname = fe) { ce->fname = NULL; }
+#define RUNKIT_MAGIC_DEL(fname)                 if (ce->fname == fe) { ce->fname = NULL; }
 
 void php_runkit_del_magic_method(zend_class_entry *ce, zend_function *fe) {
 #ifdef ZEND_ENGINE_2
@@ -564,24 +564,23 @@ PHP_FUNCTION(runkit_method_rename)
 	func = *fe;
 	php_runkit_function_copy_ctor(&func, estrndup(newname, newname_len));
 
-	if (zend_hash_add(&ce->function_table, newname, newname_len + 1, &func, sizeof(zend_function), (void**)&fe) == FAILURE) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to add new reference to class method");
-		zend_function_dtor(&func);
-		RETURN_FALSE;
-	}
-	fe->common.prototype = fe;
-
 	php_runkit_del_magic_method(ce, fe);
 
 	if (php_runkit_function_delete(&ce->function_table, methodname, methodname_len + 1, 0 TSRMLS_CC) == FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to remove old method reference from class");
 		RETURN_FALSE;
 	}
+
+	if (zend_hash_add(&ce->function_table, newname, newname_len + 1, &func, sizeof(zend_function), (void**)&fe) == FAILURE) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to add new reference to class method");
+		zend_function_dtor(&func);
+		RETURN_FALSE;
+	}
+
 	fe->common.prototype = fe;
-
 	php_runkit_add_magic_method(ce, newname, fe);
-
 	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_methods, 5, ce, ce, fe, newname, newname_len);
+
 	RETURN_TRUE;
 }
 /* }}} */

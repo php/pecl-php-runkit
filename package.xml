@@ -105,6 +105,7 @@ This release also:
     <file name="bug10053.phpt" role="test" />
     <file name="bug10300.phpt" role="test" />
     <file name="bug56662.phpt" role="test" />
+    <file name="bug56976.phpt" role="test" />
     <file name="bug57249.phpt" role="test" />
     <file name="bug57685.phpt" role="test" />
    </dir> <!-- //tests -->

@@ -299,14 +299,22 @@ static int php_runkit_import_classes(HashTable *class_table, long flags TSRMLS_D
 			return FAILURE;
 		}
 
-		if (((type = zend_hash_get_current_key_ex(EG(class_table), &key, &key_len, &idx, 0, &pos)) != HASH_KEY_NON_EXISTANT) && 
+		if (((type = zend_hash_get_current_key_ex(class_table, &key, &key_len, &idx, 0, &pos)) != HASH_KEY_NON_EXISTANT) && 
 			ce && ce->type == ZEND_USER_CLASS) {
 			zend_class_entry *dce;
 
-			/* We can clobber the temp class's name, it'll be freed soon anyway */
-			php_strtolower((char*)ce->name, ce->name_length);
+			if (!zend_hash_exists(EG(class_table), key, key_len)) {
+				/* "Importing" new class, just add it as a reference and move on */
+#ifdef ZEND_ENGINE_2
+				ce->refcount++;
+#else
+				php_error_docref(NULL TSRMSL_CC, E_ERROR, "Apathy error: Making the \"import\" of new class definitions in PHP4 is just more hacky than it's worth.  Solve this by having `class %s {}` in your codebase before calling runkit_import() or upgrade to PHP5 and join us in the 21st century.  We'll leave the download server running for you.", ce->name);
+#endif
+				zend_hash_add(EG(class_table), key, key_len, (void**)&ce, sizeof(zend_class_entry*), NULL);
+				return SUCCESS;
+			}
 
-			if (php_runkit_fetch_class((char*)ce->name, ce->name_length, &dce TSRMLS_CC) == FAILURE) {
+			if (php_runkit_fetch_class(key, key_len - 1, &dce TSRMLS_CC) == FAILURE) {
 				/* Oddly non-existant target class or error retreiving it... Or it's an internal class... */
 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Cannot redeclare class %s", ce->name);
 				continue;

@@ -61,7 +61,7 @@ PHP_FUNCTION(runkit_zval_inspect)
 	add_assoc_stringl(return_value, "address", addr, addr_len, 0);
 
 #if (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 3) || (PHP_MAJOR_VERSION >= 6)
-	add_assoc_long(return_value, "refcount", ZVAL_REFCOUNT(value));
+	add_assoc_long(return_value, "refcount", Z_REFCOUNT_P(value));
 	add_assoc_bool(return_value, "is_ref", Z_ISREF_P(value));
 #else
 	add_assoc_long(return_value, "refcount", value->refcount);

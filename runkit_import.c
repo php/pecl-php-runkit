@@ -162,7 +162,7 @@ static int php_runkit_import_class_consts(zend_class_entry *dce, zend_class_entr
 					goto import_const_skip;
 				}
 			}
-			ZVAL_ADDREF(*c);
+			Z_ADDREF_P(*c);
 			if (zend_hash_add_or_update(&dce->constants_table, key, key_len, (void*)c, sizeof(zval*), NULL, action) == FAILURE) {
 				zval_ptr_dtor(c);
 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to import %s::%s", dce->name, key);
@@ -255,7 +255,7 @@ static int php_runkit_import_class_props(zend_class_entry *dce, zend_class_entry
 				continue;
 			}
 		}
-		ZVAL_ADDREF(*p);
+		Z_ADDREF_P(*p);
 		if (zend_hash_add_or_update(&dce->default_properties, key, key_len, (void*)p, sizeof(zval*), NULL, action) == FAILURE) {
 			zval_ptr_dtor(p);
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to import %s->%s", dce->name, pname);

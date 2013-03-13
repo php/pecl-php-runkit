@@ -57,7 +57,7 @@ int php_runkit_update_children_def_props(zend_class_entry *ce ZEND_HASH_APPLY_AR
 
 #ifdef ZEND_ENGINE_2_4
 {
-	ZVAL_ADDREF(p);
+	Z_ADDREF_P(p);
 	zend_property_info *oldpi;
 	if (zend_hash_find(&ce->properties_info, pname, pname_len + 1, (void**)&oldpi) == SUCCESS) {
 		zval_ptr_dtor(&(ce->default_properties_table[oldpi->offset]));
@@ -74,7 +74,7 @@ int php_runkit_update_children_def_props(zend_class_entry *ce ZEND_HASH_APPLY_AR
 }
 #else /* PHP <= 5.3 */
 	zend_hash_del(&ce->default_properties, pname, pname_len + 1);
-	ZVAL_ADDREF(p);
+	Z_ADDREF_P(p);
 	if (zend_hash_add(&ce->default_properties, pname, pname_len + 1, p, sizeof(zval*), NULL) ==  FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Error updating child class");
 		return ZEND_HASH_APPLY_KEEP;

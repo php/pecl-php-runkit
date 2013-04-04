@@ -74,6 +74,7 @@ This release also:
     <file name="runkit_method_rename.phpt" role="test" />
     <file name="runkit_return_value_used.phpt" role="test" />
     <file name="runkit_static_vars.phpt" role="test" />
+    <file name="Runkit_Sandbox.open_basedir.phpt" role="test" />
     <file name="Runkit_Sandbox_.active.phpt" role="test" />
     <file name="Runkit_Sandbox_.output_handler.phpt" role="test" />
     <file name="runkit_sandbox_output_handler.phpt" role="test" />
@@ -109,6 +110,7 @@ This release also:
     <file name="bug57249.phpt" role="test" />
     <file name="bug57649.phpt" role="test" />
     <file name="bug57685.phpt" role="test" />
+    <file name="bug64496.phpt" role="test" />
    </dir> <!-- //tests -->
    <file name="config.m4" role="src" />
    <file name="config.w32" role="src" />

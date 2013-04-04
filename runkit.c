@@ -294,6 +294,13 @@ static void php_runkit_register_auto_global(char *s, int len TSRMLS_DC)
 
 #ifdef ZEND_ENGINE_2_4
 	if (zend_register_auto_global(s, len, 0, NULL TSRMLS_CC) == SUCCESS) {
+		zend_auto_global *auto_global;
+
+		if (zend_hash_find(CG(auto_globals), s, len + 1, (void*) &auto_global) == FAILURE) {
+			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Cannot locate the newly created autoglobal");
+			return;
+		}
+		auto_global->armed = 0;
 #elif defined(ZEND_ENGINE_2)
 	if (zend_register_auto_global(s, len, NULL TSRMLS_CC) == SUCCESS) {
 

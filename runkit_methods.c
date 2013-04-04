@@ -430,7 +430,8 @@ methodname_len);
 /* {{{ php_runkit_method_copy
  */
 static int php_runkit_method_copy(char *dclass, int dclass_len, char *dfunc, int dfunc_len,
-								  char *sclass, int sclass_len, char *sfunc, int sfunc_len TSRMLS_DC)
+                                  char *sclass, int sclass_len, char *sfunc, int sfunc_len,
+                                  char *orig_dfunc TSRMLS_DC)
 {
 	zend_class_entry *dce, *sce;
 	zend_function dfe, *sfe;
@@ -449,7 +450,7 @@ static int php_runkit_method_copy(char *dclass, int dclass_len, char *dfunc, int
 	}
 
 	dfe = *sfe;
-	php_runkit_function_copy_ctor(&dfe, estrndup(dfunc, dfunc_len));
+	php_runkit_function_copy_ctor(&dfe, orig_dfunc);
 
 #ifdef ZEND_ENGINE_2
 	dfe.common.scope = dce;
@@ -589,7 +590,7 @@ PHP_FUNCTION(runkit_method_rename)
 	Copy a method from one name to another or from one class to another */
 PHP_FUNCTION(runkit_method_copy)
 {
-	char *dclass, *dfunc, *sclass, *sfunc = NULL;
+	char *dclass, *dfunc, *sclass, *sfunc = NULL, *orig_dfunc;
 	int dclass_len, dfunc_len, sclass_len, sfunc_len = 0;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s/s/s/|s/",   &dclass,    &dclass_len,
@@ -598,20 +599,26 @@ PHP_FUNCTION(runkit_method_copy)
 																		&sfunc,     &sfunc_len) == FAILURE) {
 		RETURN_FALSE;
 	}
+	orig_dfunc = estrndup(dfunc, dfunc_len);
 
 	php_strtolower(sclass, sclass_len);
 	php_strtolower(dclass, dclass_len);
 	php_strtolower(dfunc, dfunc_len);
 
-    if (!sfunc) {
+	if (!sfunc) {
 		sfunc = dfunc;
 		sfunc_len = dfunc_len;
-    } else {
+	} else {
 		php_strtolower(sfunc, sfunc_len);
-    }
+	}
 
-	RETURN_BOOL(php_runkit_method_copy( dclass, dclass_len, dfunc, dfunc_len,
-										sclass, sclass_len, sfunc, sfunc_len TSRMLS_CC) == SUCCESS ? 1 : 0);
+	if (FAILURE == php_runkit_method_copy(dclass, dclass_len, dfunc, dfunc_len,
+	                                      sclass, sclass_len, sfunc, sfunc_len,
+                                              orig_dfunc TSRMLS_CC)) {
+		efree(orig_dfunc);
+		RETURN_FALSE;
+	}
+	RETURN_TRUE;
 }
 /* }}} */
 #endif /* PHP_RUNKIT_MANIPULATION */

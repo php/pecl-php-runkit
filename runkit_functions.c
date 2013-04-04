@@ -21,6 +21,134 @@
 #include "php_runkit.h"
 
 #ifdef PHP_RUNKIT_MANIPULATION
+#ifdef ZEND_ENGINE_2
+extern zend_class_entry *reflection_function_ptr;
+extern zend_class_entry *reflection_method_ptr;
+extern zend_class_entry *reflection_parameter_ptr;
+
+typedef struct {
+	zend_object zo;
+	void *ptr;
+#ifndef ZEND_ENGINE_2_3
+	unsigned int free_ptr:1;
+#endif
+} reflection_object;
+
+typedef struct {
+	zend_uint offset;
+	zend_uint required;
+	struct _zend_arg_info *arg_info;
+	zend_function *fptr;
+} parameter_reference;
+
+void php_runkit_std_object_set_property(int handle, const char *prop, zval *zv TSRMLS_DC) {
+	zval zobj, zname;
+
+	INIT_PZVAL(&zobj);
+	zobj.type = IS_OBJECT;
+	zobj.value.obj.handle = handle;
+	zobj.value.obj.handlers = zend_get_std_object_handlers();
+
+	INIT_PZVAL(&zname);
+	ZVAL_STRING(&zname, prop, 0);
+
+	zobj.value.obj.handlers->write_property(&zobj, &zname, zv PHP_RUNKIT_NOLITERAL_CC TSRMLS_CC);
+}
+
+void php_runkit_std_object_set_property_string(int handle, const char *prop, const char *val TSRMLS_DC) {
+	zval *zv;
+
+	MAKE_STD_ZVAL(zv);
+	ZVAL_STRING(zv, val, 1);
+	php_runkit_std_object_set_property(handle, prop, zv TSRMLS_CC);
+	zval_ptr_dtor(&zv);
+}
+
+static PHP_FUNCTION(runkit_removed_function) {
+	php_error_docref(NULL TSRMLS_CC, E_ERROR, "A function removed by runkit was somehow invoked");
+}
+
+static zend_internal_function php_runkit_removed_function = {
+	ZEND_INTERNAL_FUNCTION,
+	"__function_removed_by_runkit__",
+	NULL,
+	ZEND_ACC_PUBLIC,
+	NULL, 0, 0, NULL,
+#ifndef ZEND_ENGINE_2_4
+	0, 0,
+#endif
+	PHP_FN(runkit_removed_function),
+	&runkit_module_entry
+};
+
+static PHP_FUNCTION(runkit_removed_method) {
+	php_error_docref(NULL TSRMLS_CC, E_ERROR, "A method removed by runkit was somehow invoked");
+}
+
+static zend_internal_function php_runkit_removed_method = {
+	ZEND_INTERNAL_FUNCTION,
+	"__method_removed_by_runkit__",
+	NULL,
+#ifdef ZEND_ENGINE2
+	ZEND_ACC_ALLOW_STATIC |
+#endif
+	ZEND_ACC_PUBLIC,
+	NULL, 0, 0, NULL,
+#ifndef ZEND_ENGINE_2_4
+	0, 0,
+#endif
+	PHP_FN(runkit_removed_method),
+	&runkit_module_entry
+};
+
+void php_runkit_function_reflection_remove(zend_function *fe TSRMLS_DC) {
+	int i;
+
+	if (!EG(objects_store).object_buckets) {
+		return;
+	}
+
+	for (i = 1; i < EG(objects_store).top ; i++) {
+		reflection_object *refl_obj = EG(objects_store).object_buckets[i].bucket.obj.object;
+		parameter_reference *reference;
+
+		if (!refl_obj || !EG(objects_store).object_buckets[i].valid ||
+		     EG(objects_store).object_buckets[i].destructor_called) {
+			continue;
+		}
+
+		if ((refl_obj->zo.ce == reflection_function_ptr) &&
+		    (refl_obj->ptr == (void*)fe)) {
+			refl_obj->ptr = &php_runkit_removed_function;
+			php_runkit_std_object_set_property_string(i, "name", php_runkit_removed_function.function_name TSRMLS_CC);
+
+		} else if ((refl_obj->zo.ce == reflection_method_ptr) &&
+		    (refl_obj->ptr == (void*)fe)) {
+			zend_internal_function *zif = refl_obj->ptr =
+			    estrndup((char*)&php_runkit_removed_method, sizeof(php_runkit_removed_method));
+			zif->scope = fe->common.scope;
+			zif->function_name = estrdup(zif->function_name);
+			zif->prototype = zif;
+#ifdef ZEND_ENGINE_2_3
+			zif->fn_flags |= ZEND_ACC_CALL_VIA_HANDLER; // Overloaded "free me" flag
+#else
+			refl_obj->free_ptr = 1;
+#endif
+
+			php_runkit_std_object_set_property_string(i, "name", php_runkit_removed_method.function_name TSRMLS_CC);
+
+		} else if ((refl_obj->zo.ce == reflection_parameter_ptr) &&
+		    (reference = (parameter_reference*)refl_obj->ptr) &&
+		    (reference->fptr == fe)) {
+			refl_obj->ptr = NULL;
+			php_runkit_std_object_set_property_string(i, "name", "__parameter_removed_by_runkit__" TSRMLS_CC);
+		}
+	}
+}
+#else /* ZE1 */
+void php_runkit_function_reflection_remove(zend_function *fe TSRMLS_DC) {}
+#endif
+
 void php_runkit_function_dtor(zend_function *fe TSRMLS_DC) {
 	zend_op_array *op = (zend_op_array*)fe;
 
@@ -52,6 +180,7 @@ int php_runkit_function_delete(HashTable *ht, const char *key, int key_len, ulon
 		/* Nothing to do */
 		return SUCCESS;
 	}
+	php_runkit_function_reflection_remove(fe TSRMLS_CC);
 
 	if ((fe->type != ZEND_USER_FUNCTION) ||
 	    (*fe->refcount <= 1)) {
@@ -526,7 +655,7 @@ PHP_FUNCTION(runkit_function_redefine)
 		RETURN_FALSE;
 	}
 
-	if (zend_hash_del(EG(function_table), funcname, funcname_len + 1) == FAILURE) {
+	if (php_runkit_function_delete(EG(function_table), funcname, funcname_len + 1, 0 TSRMLS_CC) == FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to remove old function definition for %s()", funcname);
 		RETURN_FALSE;
 	}

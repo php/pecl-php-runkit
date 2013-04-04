@@ -34,6 +34,12 @@ static int php_runkit_remove_inherited_methods(zend_function *fe, zend_class_ent
 
 	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, function_name, function_name_len);
 
+	/* Since we're about to remove this scope shift is *almost*
+	 * entirely thrown away, except that reflecion_remove() uses
+	 * it for declaring the scope of the zombie function
+	 */
+	fe->common.scope = ce;
+	php_runkit_function_reflection_remove(fe TSRMLS_CC);
 	php_runkit_del_magic_method(ce, fe);
 
 	return ZEND_HASH_APPLY_REMOVE;
@@ -62,6 +68,7 @@ PHP_FUNCTION(runkit_class_emancipate)
 	}
 
 	zend_hash_apply_with_argument(&ce->function_table, (apply_func_arg_t)php_runkit_remove_inherited_methods, ce TSRMLS_CC);
+	ce->parent = NULL;
 
 	RETURN_TRUE;
 }

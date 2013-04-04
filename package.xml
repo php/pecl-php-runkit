@@ -133,6 +133,21 @@ This release also:
     <file name="runkit_zval_inspect.phpt" role="test" />
     <file name="runkit_superglobals.phpt" role="test" />
     <file name="runkit_redefine_old_style_ctor.phpt" role="test" />
+    <file name="runkit_function_remove_and_reflection.phpt" role="test" />
+    <file name="runkit_function_remove_and_reflection_parameter.phpt" role="test" />
+    <file name="runkit_function_rename_and_reflection.phpt" role="test" />
+    <file name="runkit_import_function_and_reflection.phpt" role="test" />
+    <file name="runkit_import_method_and_reflection.phpt" role="test" />
+    <file name="runkit_method_remove_and_reflection.phpt" role="test" />
+    <file name="runkit_method_remove_and_reflection_parameter.phpt" role="test" />
+    <file name="runkit_method_remove_and_reflection_parameter_with_inheritance.phpt" role="test" />
+    <file name="runkit_method_remove_and_reflection_with_inheritance.phpt" role="test" />
+    <file name="runkit_method_rename_and_reflection.phpt" role="test" />
+    <file name="runkit_function_redefine_and_reflection.phpt" role="test" />
+    <file name="runkit_method_redefine_and_reflection.phpt" role="test" />
+    <file name="runkit_method_redefine_and_reflection_with_inheritance.phpt" role="test" />
+    <file name="runkit_adopt_emancipate_and_inheritance.phpt" role="test" />
+    <file name="runkit_adopt_emancipate_and_reflection.phpt" role="test" />
 
    </dir> <!-- //tests -->
    <file name="config.m4" role="src" />

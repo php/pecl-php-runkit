@@ -80,11 +80,13 @@
 # define PHP_RUNKIT_OP_U(zop) (zop)
 # define PHP_RUNKIT_LITERAL_DC , const struct _zend_literal *key
 # define PHP_RUNKIT_LITERAL_CC , key
+# define PHP_RUNKIT_NOLITERAL_CC , NULL
 #else
 # define PHP_RUNKIT_OP_TYPE(zop) ((zop).op_type)
 # define PHP_RUNKIT_OP_U(zop) ((zop).u)
 # define PHP_RUNKIT_LITERAL_DC
 # define PHP_RUNKIT_LITERAL_CC
+# define PHP_RUNKIT_NOLITERAL_CC
 #endif
 
 #ifndef ZEND_ENGINE_2_5
@@ -214,6 +216,7 @@ void php_runkit_function_copy_ctor(zend_function *fe, char *newname);
 int php_runkit_generate_lambda_method(char *arguments, int arguments_len, char *phpcode, int phpcode_len, zend_function **pfe TSRMLS_DC);
 int php_runkit_destroy_misplaced_functions(zend_hash_key *hash_key TSRMLS_DC);
 int php_runkit_restore_internal_functions(zend_internal_function *fe ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);
+void php_runkit_function_reflection_remove(zend_function *fe TSRMLS_DC);
 
 /* runkit_methods.c */
 void php_runkit_add_magic_method(zend_class_entry *ce, const char *method, zend_function *fe);

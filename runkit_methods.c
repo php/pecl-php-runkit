@@ -260,6 +260,7 @@ int php_runkit_update_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS
 			/* This method was defined below our current level, leave it be */
 			return ZEND_HASH_APPLY_KEEP;
 		}
+		php_runkit_function_reflection_remove(cfe TSRMLS_CC);
 	}
 
 	/* Process children of this child */
@@ -352,7 +353,7 @@ static void php_runkit_method_add_or_update(INTERNAL_FUNCTION_PARAMETERS, int ad
 	char *classname, *methodname, *arguments, *phpcode;
 	int classname_len, methodname_len, arguments_len, phpcode_len;
 	zend_class_entry *ce, *ancestor_class = NULL;
-	zend_function func, *fe;
+	zend_function func, *fe, *oldfunc = NULL;
 	long argc = ZEND_NUM_ARGS();
 	ulong methodname_hash;
 #ifdef ZEND_ENGINE_2
@@ -384,12 +385,12 @@ static void php_runkit_method_add_or_update(INTERNAL_FUNCTION_PARAMETERS, int ad
 	}
 
 	if (add_or_update == HASH_UPDATE) {
-		if (php_runkit_fetch_class_method(classname, classname_len, methodname, methodname_len, &ce, &fe TSRMLS_CC) == FAILURE) {
+		if (php_runkit_fetch_class_method(classname, classname_len, methodname, methodname_len, &ce, &oldfunc TSRMLS_CC) == FAILURE) {
 			RETURN_FALSE;
 		}
-		ancestor_class = php_runkit_locate_scope(ce, fe, methodname, methodname_len);
+		ancestor_class = php_runkit_locate_scope(ce, oldfunc, methodname, methodname_len);
 
-		if (php_runkit_check_call_stack(&fe->op_array TSRMLS_CC) == FAILURE) {
+		if (php_runkit_check_call_stack(&oldfunc->op_array TSRMLS_CC) == FAILURE) {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Cannot redefine a method while that method is active.");
 			RETURN_FALSE;
 		}
@@ -429,6 +430,9 @@ methodname_len);
 	if (zend_hash_quick_add_or_update(&ce->function_table, methodname, methodname_len + 1, methodname_hash, &func, sizeof(zend_function), (void**)&fe, add_or_update) == FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to add method to class");
 		RETURN_FALSE;
+	}
+	if (oldfunc) {
+		php_runkit_function_reflection_remove(oldfunc TSRMLS_CC);
 	}
 
 	if (php_runkit_function_delete(EG(function_table), RUNKIT_TEMP_FUNCNAME, sizeof(RUNKIT_TEMP_FUNCNAME), RUNKIT_TEMP_FUNCNAME_HASH TSRMLS_CC) == FAILURE) {

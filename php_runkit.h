@@ -258,6 +258,9 @@ zend_class_entry *_php_runkit_locate_scope(zend_class_entry *ce, zend_function *
 #ifndef Z_SET_ISREF_PP
 # define Z_SET_ISREF_PP(ppzv) Z_SET_ISREF_P(*ppzv)
 #endif
+#ifndef Z_REFCOUNT_P
+# define Z_REFCOUNT_P(pzv) ((pzv)->refcount)
+#endif
 
 /* runkit_constants.c */
 int php_runkit_update_children_consts(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key);

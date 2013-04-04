@@ -256,28 +256,16 @@ inline void php_runkit_sandbox_ini_override(php_runkit_sandbox_object *objval, H
 #ifndef ZEND_ENGINE_2_4
 	/* safe_mode only goes on */
 	if (!safe_mode &&
-		zend_hash_find(options, "safe_mode", sizeof("safe_mode"), (void**)&tmpzval) == SUCCESS) {
-		zval copyval = **tmpzval;
-
-		zval_copy_ctor(&copyval);
-		convert_to_boolean(&copyval);
-
-		if (Z_BVAL(copyval)) {
-			zend_alter_ini_entry("safe_mode", sizeof("safe_mode"), "1", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
-		}
+	    (zend_hash_find(options, "safe_mode", sizeof("safe_mode"), (void**)&tmpzval) == SUCCESS) &&
+	    zend_is_true(*tmpzval)) {
+		zend_alter_ini_entry("safe_mode", sizeof("safe_mode"), "1", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
 	}
 
 	/* safe_mode_gid only goes off */
 	if (safe_mode_gid &&
-		zend_hash_find(options, "safe_mode_gid", sizeof("safe_mode_gid"), (void**)&tmpzval) == SUCCESS) {
-		zval copyval = **tmpzval;
-
-		zval_copy_ctor(&copyval);
-		convert_to_boolean(&copyval);
-
-		if (!Z_BVAL(copyval)) {
-			zend_alter_ini_entry("safe_mode_gid", sizeof("safe_mode_gid"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
-		}
+		(zend_hash_find(options, "safe_mode_gid", sizeof("safe_mode_gid"), (void**)&tmpzval) == SUCCESS) &&
+		!zend_is_true(*tmpzval)) {
+		zend_alter_ini_entry("safe_mode_gid", sizeof("safe_mode_gid"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
 	}
 
 	/* safe_mode_include_dir can go deeper, or be set to blank (which means nowhere is includable) */
@@ -338,15 +326,9 @@ child_open_basedir_set:
 
 	/* allow_url_fopen goes off only */
 	if (allow_url_fopen &&
-		zend_hash_find(options, "allow_url_fopen", sizeof("allow_url_fopen"), (void**)&tmpzval) == SUCCESS) {
-		zval copyval = **tmpzval;
-
-		zval_copy_ctor(&copyval);
-		convert_to_boolean(&copyval);
-
-		if (!Z_BVAL(copyval)) {
-			zend_alter_ini_entry("allow_url_fopen", sizeof("allow_url_fopen"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
-		}
+	    (zend_hash_find(options, "allow_url_fopen", sizeof("allow_url_fopen"), (void**)&tmpzval) == SUCCESS) &&
+	    !zend_is_true(*tmpzval)) {
+		zend_alter_ini_entry("allow_url_fopen", sizeof("allow_url_fopen"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
 	}
 
 	/* Can only disable additional functions */
@@ -417,15 +399,9 @@ child_open_basedir_set:
 	}
 
 	/* May only turn off */
-	if (zend_hash_find(options, "runkit.internal_override", sizeof("runkit.internal_override"), (void**)&tmpzval) == SUCCESS) {
-		zval copyval = **tmpzval;
-
-		zval_copy_ctor(&copyval);
-		convert_to_boolean(&copyval);
-
-		if (!Z_BVAL(copyval)) {
-			zend_alter_ini_entry("runkit.internal_override", sizeof("runkit.internal_override"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
-		}
+	if ((zend_hash_find(options, "runkit.internal_override", sizeof("runkit.internal_override"), (void**)&tmpzval) == SUCCESS) &&
+	    !zend_is_true(*tmpzval)) {
+		zend_alter_ini_entry("runkit.internal_override", sizeof("runkit.internal_override"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
 	}
 
 #ifdef ZEND_ENGINE_2_2

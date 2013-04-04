@@ -269,6 +269,12 @@ int php_runkit_update_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS
 	fe = &fecopy;
 	php_runkit_function_copy_ctor(fe, NULL);
 
+	php_runkit_del_magic_method(ce, cfe);
+	if (cfe && ce->constructor &&
+	    !strcasecmp(fname, ce->constructor->common.function_name)) {
+		/* Function being replaced is the constructor */
+		ce->constructor = NULL;
+	}
 	if (zend_hash_add_or_update(&ce->function_table, fname, fname_len + 1, fe, sizeof(zend_function), (void**)&fe, cfe ? HASH_UPDATE : HASH_ADD) ==  FAILURE) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Error updating child class");
 		return ZEND_HASH_APPLY_KEEP;
@@ -276,6 +282,17 @@ int php_runkit_update_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS
 	fe->common.prototype = fe;
 
 	php_runkit_add_magic_method(ce, fname, fe);
+	if (!ce->constructor && parent_class->constructor) {
+		/* We have no constructor, but our parent does.
+		 * Bind it from our inherited copy
+		 */
+		zend_function *pctor = parent_class->constructor, *ctor;
+		if (zend_hash_find(&ce->function_table,
+		                   pctor->common.function_name, strlen(pctor->common.function_name) + 1,
+		                   (void**)&ctor) == SUCCESS) {
+			ce->constructor = ctor;
+		}
+	}
 
 	return ZEND_HASH_APPLY_KEEP;
 }
@@ -321,9 +338,8 @@ int php_runkit_clean_children_methods(zend_class_entry *ce ZEND_HASH_APPLY_ARGS_
 	/* Process children of this child */
 	zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_clean_children_methods, 4, ancestor_class, ce, fname, fname_len);
 
-	php_runkit_function_delete(&ce->function_table, fname, fname_len + 1, fname_hash TSRMLS_CC);
-
 	php_runkit_del_magic_method(ce, cfe);
+	php_runkit_function_delete(&ce->function_table, fname, fname_len + 1, fname_hash TSRMLS_CC);
 
 	return ZEND_HASH_APPLY_KEEP;
 }

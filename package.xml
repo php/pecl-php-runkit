@@ -132,6 +132,7 @@ This release also:
     <file name="runkit_sandbox_with_register_globals.phpt" role="test" />
     <file name="runkit_zval_inspect.phpt" role="test" />
     <file name="runkit_superglobals.phpt" role="test" />
+    <file name="runkit_redefine_old_style_ctor.phpt" role="test" />
 
    </dir> <!-- //tests -->
    <file name="config.m4" role="src" />

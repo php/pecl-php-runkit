@@ -243,7 +243,7 @@ PHP_FUNCTION(runkit_constant_redefine)
 	int classname_len = 0, constname_len;
 	zval *value;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz", &constname, &constname_len, &value) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s/z", &constname, &constname_len, &value) == FAILURE) {
 		RETURN_FALSE;
 	}
 
@@ -261,7 +261,7 @@ PHP_FUNCTION(runkit_constant_remove)
 	char *classname = NULL, *constname;
 	int classname_len = 0, constname_len;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &constname, &constname_len) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s/", &constname, &constname_len) == FAILURE) {
 		RETURN_FALSE;
 	}
 
@@ -280,7 +280,7 @@ PHP_FUNCTION(runkit_constant_add)
 	int classname_len = 0, constname_len;
 	zval *value;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz", &constname, &constname_len, &value) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s/z", &constname, &constname_len, &value) == FAILURE) {
 		RETURN_FALSE;
 	}
 

@@ -148,6 +148,14 @@ This release also:
     <file name="runkit_method_redefine_and_reflection_with_inheritance.phpt" role="test" />
     <file name="runkit_adopt_emancipate_and_inheritance.phpt" role="test" />
     <file name="runkit_adopt_emancipate_and_reflection.phpt" role="test" />
+    <file name="runkit_constant_add_to_class.phpt" role="test" />
+    <file name="runkit_constant_redefine_in_class.phpt" role="test" />
+    <file name="runkit_constant_remove_from_class.phpt" role="test" />
+    <file name="runkit_import_with_syntax_error.phpt" role="test" />
+    <file name="namespaces.phpt" role="test" />
+    <file name="runkit_import_class.phpt" role="test" />
+    <file name="runkit_import_class_property.phpt" role="test" />
+    <file name="runkit_import_non_existent_file.phpt" role="test" />
 
    </dir> <!-- //tests -->
    <file name="config.m4" role="src" />

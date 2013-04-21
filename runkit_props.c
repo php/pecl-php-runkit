@@ -59,16 +59,22 @@ int php_runkit_update_children_def_props(zend_class_entry *ce ZEND_HASH_APPLY_AR
 {
 	Z_ADDREF_P(p);
 	zend_property_info *oldpi;
+	zval ***default_table_ptr = (pi->flags & ZEND_ACC_STATIC) ?
+	                            &(ce->default_static_members_table) :
+	                            &(ce->default_properties_table);
+	int *default_count_ptr = (pi->flags & ZEND_ACC_STATIC) ?
+                                 &(ce->default_static_members_count) :
+                                 &(ce->default_properties_count);
 	if (zend_hash_find(&ce->properties_info, pname, pname_len + 1, (void**)&oldpi) == SUCCESS) {
-		zval_ptr_dtor(&(ce->default_properties_table[oldpi->offset]));
-		ce->default_properties_table[oldpi->offset] = p;
+		zval_ptr_dtor(&((*default_table_ptr)[oldpi->offset]));
+		(*default_table_ptr)[oldpi->offset] = p;
 	} else {
 		zend_property_info newpi = *pi;
 		newpi.name = estrndup(pi->name, pi->name_length);
 		if (pi->doc_comment) newpi.doc_comment = estrndup(pi->doc_comment, pi->doc_comment_len);
-		newpi.offset = ce->default_properties_count++;
-		ce->default_properties_table = safe_erealloc(ce->default_properties_table, ce->default_properties_count, sizeof(zval*), 0);
-		ce->default_properties_table[newpi.offset] = p;
+		newpi.offset = (*default_count_ptr)++;
+		*default_table_ptr = safe_erealloc(*default_table_ptr, *default_count_ptr, sizeof(zval*), 0);
+		(*default_table_ptr)[newpi.offset] = p;
 		zend_hash_add(&ce->properties_info, pname, pname_len + 1, &newpi, sizeof(zend_property_info), (void**)&oldpi);
 	}
 }

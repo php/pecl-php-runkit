@@ -38,8 +38,9 @@
 #define PHP_RUNKIT_IMPORT_CLASS_METHODS		0x0002
 #define PHP_RUNKIT_IMPORT_CLASS_CONSTS		0x0004
 #define PHP_RUNKIT_IMPORT_CLASS_PROPS		0x0008
-#define PHP_RUNKIT_IMPORT_CLASSES			(PHP_RUNKIT_IMPORT_CLASS_METHODS|PHP_RUNKIT_IMPORT_CLASS_CONSTS|PHP_RUNKIT_IMPORT_CLASS_PROPS)
-#define PHP_RUNKIT_IMPORT_OVERRIDE			0x0010
+#define PHP_RUNKIT_IMPORT_CLASS_STATIC_PROPS	0x0010
+#define PHP_RUNKIT_IMPORT_CLASSES		(PHP_RUNKIT_IMPORT_CLASS_METHODS|PHP_RUNKIT_IMPORT_CLASS_CONSTS|PHP_RUNKIT_IMPORT_CLASS_PROPS|PHP_RUNKIT_IMPORT_CLASS_STATIC_PROPS)
+#define PHP_RUNKIT_IMPORT_OVERRIDE		0x1000
 
 #if ZEND_MODULE_API_NO > 20121211
 #define ZEND_ENGINE_2_5
@@ -205,6 +206,18 @@ extern ZEND_DECLARE_MODULE_GLOBALS(runkit);
 #define zend_hash_quick_find(ht, arKey, nKeyLength, arKeyHash, pDest) \
 	zend_hash_find(ht, arKey, nKeyLength, pDest)
 #endif /* ZE2 hash API */
+
+/* inlines */
+static inline int php_runkit_skip_leading_ns_sep(char **str, int *str_len) {
+	if ((*str)[0] != '\\') {
+		return 0;
+	}
+	(*str)++;
+	if (str_len) {
+		(*str_len)--;
+	}
+	return 1;
+}
 
 /* runkit_functions.c */
 #define RUNKIT_TEMP_FUNCNAME  "__runkit_temporary_function__"

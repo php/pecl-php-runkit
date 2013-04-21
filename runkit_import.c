@@ -102,6 +102,8 @@ static int php_runkit_import_class_methods(zend_class_entry *dce, zend_class_ent
 
 		if (zend_hash_quick_find(&dce->function_table, key, key_len, key_hash, (void**)&dfe) == SUCCESS) {
 			if (!override) {
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "%s::%s() already exists, not importing",
+				                 dce->name, dfe->common.function_name);
 				continue;
 			}
 
@@ -192,6 +194,15 @@ static int php_runkit_import_class_props(zend_class_entry *dce, zend_class_entry
 	for(zend_hash_internal_pointer_reset_ex(&ce->properties_info, &pos);
 	    zend_hash_get_current_data_ex(&ce->properties_info, (void**)&pi, &pos) == SUCCESS && pi;
 	    zend_hash_move_forward_ex(&ce->properties_info, &pos)) {
+		zval ***default_table_ptr = (pi->flags & ZEND_ACC_STATIC) ?
+		                            &(dce->default_static_members_table) :
+		                            &(dce->default_properties_table);
+		int *default_count_ptr = (pi->flags & ZEND_ACC_STATIC) ?
+                                         &(dce->default_static_members_count) :
+                                         &(dce->default_properties_count);
+		zval **source_table = (pi->flags & ZEND_ACC_STATIC) ?
+		                      ce->default_static_members_table :
+		                      ce->default_properties_table;
 		char *key;
 		int key_len;
 		long idx;
@@ -208,19 +219,35 @@ static int php_runkit_import_class_props(zend_class_entry *dce, zend_class_entry
 			if (newpi.doc_comment) {
 				newpi.doc_comment = estrndup(newpi.doc_comment, newpi.doc_comment_len);
 			}
-			dce->default_properties_table = safe_erealloc(dce->default_properties_table, dce->default_properties_count + 1, sizeof(zval*), 0);
-			newpi.offset = dce->default_properties_count++;
-			MAKE_STD_ZVAL(dce->default_properties_table[newpi.offset]);
+			*default_table_ptr = safe_erealloc(*default_table_ptr, *default_count_ptr + 1, sizeof(zval*), 0);
+			newpi.offset = (*default_count_ptr)++;
+			MAKE_STD_ZVAL((*default_table_ptr)[newpi.offset]);
 
 			zend_hash_add(&dce->properties_info, key, key_len, &newpi, sizeof(zend_property_info), (void**)&dpi);
+		} else if (!override) {
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "%s::%s already exists, not importing",
+			                 dce->name, pi->name);
+			continue;
+		} else if ((pi->flags & ZEND_ACC_STATIC) != (dpi->flags & ZEND_ACC_STATIC)) {
+			/* Awkward case, static to non-static (or vice-versa) */
+			zval **oldprop_table = (dpi->flags & ZEND_ACC_STATIC) ?
+			                       dce->default_static_members_table :
+			                       dce->default_properties_table;
+			zval *v = oldprop_table[dpi->offset];
+			/* TODO: Shuffle last prop into this offset, for now use a dummy val */
+			oldprop_table[dpi->offset] = EG(uninitialized_zval_ptr);
+			*default_table_ptr = safe_erealloc(*default_table_ptr, *default_count_ptr + 1, sizeof(zval*), 0);
+			dpi->offset = (*default_count_ptr)++;
+			(*default_table_ptr)[dpi->offset] = v;
 		}
+		dpi->flags = pi->flags;
 		dpi->ce = dce;
-		zval_ptr_dtor(&dce->default_properties_table[dpi->offset]);
-		MAKE_STD_ZVAL(dce->default_properties_table[dpi->offset]);
-		ZVAL_ZVAL(dce->default_properties_table[dpi->offset], ce->default_properties_table[pi->offset], 1, 0);
+		zval_ptr_dtor(&((*default_table_ptr)[dpi->offset]));
+		MAKE_STD_ZVAL((*default_table_ptr)[dpi->offset]);
+		ZVAL_ZVAL((*default_table_ptr)[dpi->offset], source_table[pi->offset], 1, 0);
 
 		if (pi->flags & (ZEND_ACC_PUBLIC|ZEND_ACC_PROTECTED)) {
-			zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_def_props, 5, dce, dce->default_properties_table[dpi->offset], key, key_len - 1, dpi);
+			zend_hash_apply_with_arguments(EG(class_table) ZEND_HASH_APPLY_ARGS_TSRMLS_CC, (apply_func_args_t)php_runkit_update_children_def_props, 5, dce, (*default_table_ptr)[dpi->offset], key, key_len - 1, dpi);
 		}
 	}
 
@@ -448,13 +475,27 @@ PHP_FUNCTION(runkit_import)
 	current_function_table = CG(function_table);
 	CG(function_table) = function_table;
 
-	new_op_array = local_compile_filename(ZEND_INCLUDE, filename TSRMLS_CC);
-	
+	zend_try {
+		new_op_array = local_compile_filename(ZEND_INCLUDE, filename TSRMLS_CC);
+	} zend_catch {
+		CG(class_table) = current_class_table;
+		CG(function_table) = current_function_table;
+		zend_hash_destroy(class_table);
+		efree(class_table);
+		zend_hash_destroy(function_table);
+		efree(function_table);
+		zend_bailout();
+	} zend_end_try();
+
 	CG(class_table) = current_class_table;
 	CG(function_table) = current_function_table;
 	
 	if (!new_op_array) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Import Failure");
+		zend_hash_destroy(class_table);
+		efree(class_table);
+		zend_hash_destroy(function_table);
+		efree(function_table);
 		RETURN_FALSE;
 	}
 

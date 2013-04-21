@@ -110,6 +110,7 @@ int php_runkit_fetch_class(char *classname, int classname_len, zend_class_entry 
 	zend_class_entry **ze;
 #endif
 
+	php_runkit_skip_leading_ns_sep(&classname, &classname_len);
 	php_strtolower(classname, classname_len);
 
 #ifdef ZEND_ENGINE_2
@@ -183,6 +184,7 @@ TSRMLS_DC)
 #endif
 
 	/* We never promised the calling scope we'd leave classname untouched :) */
+	php_runkit_skip_leading_ns_sep(&classname, &classname_len);
 	php_strtolower(classname, classname_len);
 
 #ifdef ZEND_ENGINE_2

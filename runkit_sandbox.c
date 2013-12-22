@@ -48,6 +48,12 @@ static zend_class_entry *php_runkit_sandbox_class_entry;
 
 #define PHP_RUNKIT_SANDBOX_FETCHBOX(zval_p) (php_runkit_sandbox_object*)zend_objects_get_address(zval_p TSRMLS_CC)
 
+#ifdef ZEND_ENGINE_2_7
+# define ISTRUE_CC TSRMLS_CC
+#else
+# define ISTRUE_CC
+#endif
+
 int php_runkit_sandbox_array_deep_copy(zval **value ZEND_HASH_APPLY_ARGS_TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key)
 {
 	HashTable *target_hashtable = va_arg(args, HashTable*);
@@ -257,14 +263,14 @@ inline void php_runkit_sandbox_ini_override(php_runkit_sandbox_object *objval, H
 	/* safe_mode only goes on */
 	if (!safe_mode &&
 	    (zend_hash_find(options, "safe_mode", sizeof("safe_mode"), (void**)&tmpzval) == SUCCESS) &&
-	    zend_is_true(*tmpzval)) {
+	    zend_is_true(*tmpzval ISTRUE_CC)) {
 		zend_alter_ini_entry("safe_mode", sizeof("safe_mode"), "1", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
 	}
 
 	/* safe_mode_gid only goes off */
 	if (safe_mode_gid &&
 		(zend_hash_find(options, "safe_mode_gid", sizeof("safe_mode_gid"), (void**)&tmpzval) == SUCCESS) &&
-		!zend_is_true(*tmpzval)) {
+		!zend_is_true(*tmpzval ISTRUE_CC)) {
 		zend_alter_ini_entry("safe_mode_gid", sizeof("safe_mode_gid"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
 	}
 
@@ -327,7 +333,7 @@ child_open_basedir_set:
 	/* allow_url_fopen goes off only */
 	if (allow_url_fopen &&
 	    (zend_hash_find(options, "allow_url_fopen", sizeof("allow_url_fopen"), (void**)&tmpzval) == SUCCESS) &&
-	    !zend_is_true(*tmpzval)) {
+	    !zend_is_true(*tmpzval ISTRUE_CC)) {
 		zend_alter_ini_entry("allow_url_fopen", sizeof("allow_url_fopen"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
 	}
 
@@ -400,7 +406,7 @@ child_open_basedir_set:
 
 	/* May only turn off */
 	if ((zend_hash_find(options, "runkit.internal_override", sizeof("runkit.internal_override"), (void**)&tmpzval) == SUCCESS) &&
-	    !zend_is_true(*tmpzval)) {
+	    !zend_is_true(*tmpzval ISTRUE_CC)) {
 		zend_alter_ini_entry("runkit.internal_override", sizeof("runkit.internal_override"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
 	}
 
@@ -408,7 +414,7 @@ child_open_basedir_set:
 	/* May only turn off */
 	if (allow_url_include &&
 	    (zend_hash_find(options, "allow_url_include", sizeof("allow_url_include"), (void**)&tmpzval) == SUCCESS) &&
-	    !zend_is_true(*tmpzval)) {
+	    !zend_is_true(*tmpzval ISTRUE_CC)) {
 		zend_alter_ini_entry("allow_url_include", sizeof("allow_url_include"), "0", 1, PHP_INI_SYSTEM, PHP_INI_STAGE_ACTIVATE);
 	}
 #endif
@@ -1111,19 +1117,29 @@ static int php_runkit_sandbox_sapi_ub_write(const char *str, uint str_length TSR
 }
 /* }}} */
 
+#ifdef ZEND_ENGINE_2_7
+# define FLUSH_CC TSRMLS_CC
+# define FLUSH_DC TSRMLS_DC
+#else
+# define FLUSH_CC
+# define FLUSH_DC
+#endif
+
 /* {{{ php_runkit_sandbox_sapi_flush
  */
-static void php_runkit_sandbox_sapi_flush(void *server_context)
+static void php_runkit_sandbox_sapi_flush(void *server_context FLUSH_DC)
 {
 	php_runkit_sandbox_object *objval;
+#ifndef ZEND_ENGINE_2_7
 	TSRMLS_FETCH();
+#endif
 
 	objval = RUNKIT_G(current_sandbox);
 
 	if (!objval) {
 		/* Not in a sandbox -- Use genuine sapi.flush handler */
 		if (php_runkit_sandbox_original_sapi.flush) {
-			php_runkit_sandbox_original_sapi.flush(server_context);
+			php_runkit_sandbox_original_sapi.flush(server_context FLUSH_CC);
 		}
 		return;
 	}
@@ -1137,7 +1153,7 @@ static void php_runkit_sandbox_sapi_flush(void *server_context)
 			!zend_is_callable(objval->output_handler, IS_CALLABLE_CHECK_NO_ACCESS, NULL ISCALLABLE_TSRMLS_CC)) {
 			/* No hander, or invalid handler, pass up the line... */
 			if (php_runkit_sandbox_original_sapi.flush) {
-				php_runkit_sandbox_original_sapi.flush(server_context);
+				php_runkit_sandbox_original_sapi.flush(server_context FLUSH_CC);
 			}
 			tsrm_set_interpreter_context(objval->context);
 			return;
@@ -1565,7 +1581,7 @@ PHP_FUNCTION(runkit_sandbox_output_handler)
 	}
 
 	if (callback) {
-		callback_is_true = zend_is_true(callback);
+		callback_is_true = zend_is_true(callback ISTRUE_CC);
 	}
 
 	if (callback && callback_is_true &&
